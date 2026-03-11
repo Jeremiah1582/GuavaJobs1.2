@@ -104,12 +104,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # Better Auth
 BETTER_AUTH_SECRET=your_secret_here_min_32_chars
 
-# Email (for OTP)
+# Resend (for OTP emails)
+RESEND_API_KEY=re_your_resend_key_here
 EMAIL_FROM=noreply@yourdomain.com
-EMAIL_SERVER_HOST=smtp.gmail.com
-EMAIL_SERVER_PORT=587
-EMAIL_SERVER_USER=your@gmail.com
-EMAIL_SERVER_PASSWORD=your_app_password
 
 # Groq AI
 GROQ_API_KEY=gsk_your_groq_key_here
