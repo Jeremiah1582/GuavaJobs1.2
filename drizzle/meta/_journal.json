@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1772609506072,
+      "tag": "20260304073146_eminent_electro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1772642119777,
+      "tag": "20260304163519_lively_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1772726862797,
+      "tag": "0002_robust_mulholland_black",
+      "breakpoints": true
+    }
+  ]
+}
