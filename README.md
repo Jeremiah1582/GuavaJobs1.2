@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/assets/logo.png" alt="InternHunt Logo" width="60" />
+
 
 # InternHunt
 
@@ -217,7 +217,7 @@ Pull requests are welcome. For major changes, open an issue first.
 
 ## License
 
-MIT © 2026 [Lakshya Saxena](https://github.com/SaxenaLakshya)
+MIT © 2026 [Abhinav Shakya](https://github.com/abhinav-123457)
 
 ---
 
