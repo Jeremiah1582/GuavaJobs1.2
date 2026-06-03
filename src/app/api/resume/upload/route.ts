@@ -1,13 +1,17 @@
 // src/app/api/resume/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
-import { db, ensureUserResumeDir } from "@/db";
-import { resumes } from "@/db/schema";
-import { complete, parseJSON, MODEL_FAST } from "@/lib/groq";
-import { eq } from "drizzle-orm";
+import { prisma, ensureUserResumeDir } from "@/db";
+import { complete, parseJSON, MODEL_FAST } from "@/lib/llm";
 import { randomUUID } from "crypto";
 import path from "path";
 import fs from "fs/promises";
+import {
+  extractTextFromPdfBuffer,
+  isPdfUpload,
+  MAX_RESUME_PAGES,
+  resumeTextForAI,
+} from "@/lib/pdf-extract.server";
 
 // ─── Text cleaning ────────────────────────────────────────────────────────────
 
@@ -429,6 +433,55 @@ function runRuleBasedATS(text: string): RuleBasedResult {
   };
 }
 
+// ─── Multi-page structured parse (LLM) ───────────────────────────────────────
+
+type ParsedExperience = { title: string; company: string; duration: string };
+type ParsedEducation = {
+  degree: string;
+  institution: string;
+  year: string;
+  gpa?: string;
+};
+
+async function parseStructuredResume(fullText: string): Promise<{
+  summary: string;
+  experience: ParsedExperience[];
+  education: ParsedEducation[];
+}> {
+  const empty = { summary: "", experience: [], education: [] };
+  const excerpt = resumeTextForAI(fullText);
+
+  const prompt = `Parse the FULL resume below (all pages). Return ONLY valid JSON, no markdown:
+{"summary":"2-3 sentence professional summary or empty string if none","experience":[{"title":"job title","company":"company","duration":"dates"}],"education":[{"degree":"","institution":"","year":"","gpa":""}]}
+Rules:
+- Include every role, internship, and project-with-dates from all pages
+- Include all degrees/certifications listed
+- Use empty arrays if a section is missing
+
+Resume:
+${excerpt}`;
+
+  try {
+    const raw = await complete(prompt, undefined, 0.1, MODEL_FAST, 1500);
+    const parsed = parseJSON<{
+      summary?: string;
+      experience?: ParsedExperience[];
+      education?: ParsedEducation[];
+    }>(raw, null);
+
+    if (!parsed) return empty;
+
+    return {
+      summary: typeof parsed.summary === "string" ? parsed.summary.trim() : "",
+      experience: Array.isArray(parsed.experience) ? parsed.experience : [],
+      education: Array.isArray(parsed.education) ? parsed.education : [],
+    };
+  } catch (err) {
+    console.warn("[resume/upload] structured parse skipped:", err);
+    return empty;
+  }
+}
+
 // ─── API Route ────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -437,25 +490,55 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file     = formData.get("resume") as File | null;
-    const rawText  = formData.get("rawText") as string | null;
 
-    if (!file || file.type !== "application/pdf")
+    if (!file || !isPdfUpload(file))
       return NextResponse.json({ error: "Please upload a valid PDF file." }, { status: 400 });
     if (file.size > 5 * 1024 * 1024)
       return NextResponse.json({ error: "File too large. Max 5MB." }, { status: 400 });
-    if (!rawText || rawText.trim().length < 50)
+
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+    let pagesExtracted = 0;
+    let totalPages = 0;
+    let extractedText: string;
+
+    try {
+      const extracted = await extractTextFromPdfBuffer(fileBuffer, {
+        maxPages: MAX_RESUME_PAGES,
+      });
+      extractedText = extracted.text;
+      pagesExtracted = extracted.pagesExtracted;
+      totalPages = extracted.totalPages;
+      console.log(
+        `[resume/upload] PDF: ${pagesExtracted}/${totalPages} page(s), ${extractedText.length} chars`,
+      );
+    } catch (err) {
+      console.error("[resume/upload] PDF extract failed:", err);
       return NextResponse.json(
-        { error: "Could not extract text from this PDF. Please use a text-based PDF." },
-        { status: 422 }
+        {
+          error:
+            "Could not read this PDF. Use a text-based PDF (not scanned images only).",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (extractedText.length < 50)
+      return NextResponse.json(
+        {
+          error:
+            "PDF appears empty or image-only. Export your resume as a text-based PDF and try again.",
+        },
+        { status: 422 },
       );
 
-    const cleanedText = cleanText(rawText);
+    const cleanedText = cleanText(extractedText);
+    const structured  = await parseStructuredResume(cleanedText);
 
-    // Save PDF file
     const userDir      = ensureUserResumeDir(user.id);
     const safeFilename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const filepath     = path.join(userDir, safeFilename);
-    await fs.writeFile(filepath, Buffer.from(await file.arrayBuffer()));
+    await fs.writeFile(filepath, fileBuffer);
 
     // ── Step 1: Rule-based ATS ──
     const rules = runRuleBasedATS(cleanedText);
@@ -630,41 +713,48 @@ Max 60 words per fix. Use \\n for newlines.`;
       weakVerbs:       rules.weakVerbs,
     };
 
-    const summaryText = `ATS Score: ${atsScore}/100 (${grade}). ${
-      atsScore >= 75 ? "Strong profile" : atsScore >= 60 ? "Good foundation" : "Needs improvement"
-    }. ${improvements.length > 0 ? `Top fix: ${improvements[0].title}.` : "Well-structured resume."}`;
+    const summaryText =
+      structured.summary ||
+      `ATS Score: ${atsScore}/100 (${grade}). ${
+        atsScore >= 75 ? "Strong profile" : atsScore >= 60 ? "Good foundation" : "Needs improvement"
+      }. ${improvements.length > 0 ? `Top fix: ${improvements[0].title}.` : "Well-structured resume."}`;
 
     // ── Step 6: Save to DB ──
     // FIX: save improvements as full JSON objects so GET can restore them perfectly
     // FIX: save all derived fields in metadata so GET doesn't have to recalculate
-    await db.update(resumes).set({ isActive: false }).where(eq(resumes.userId, user.id));
+    await prisma.resume.updateMany({
+      where: { userId: user.id },
+      data: { isActive: 0 },
+    });
 
     const id = randomUUID();
-    await db.insert(resumes).values({
-      id,
-      userId:   user.id,
-      filename: file.name,
-      filepath,
-      rawText:  cleanedText,
-      skills:    JSON.stringify(rules.technicalSkills),
-      keywords:  JSON.stringify(rules.presentKeywords),
-      strengths: JSON.stringify([]),
-      // FIX: store full improvement objects, not flat strings
-      feedback:  JSON.stringify(improvements),
-      experience: JSON.stringify([]),
-      education:  JSON.stringify([]),
-      atsScore,
-      summary: summaryText,
-      isActive: true,
-      // FIX: store all fields that GET route needs to reconstruct the full result
-      metadata: JSON.stringify({
-        grade,
-        passesATS,
-        sectionScores,
-        stats,
-        softSkills:      rules.softSkills,
-        missingKeywords: rules.missingKeywords,
-      }),
+    await prisma.resume.create({
+      data: {
+        id,
+        userId: user.id,
+        filename: file.name,
+        filepath,
+        rawText: cleanedText,
+        skills: JSON.stringify(rules.technicalSkills),
+        keywords: JSON.stringify(rules.presentKeywords),
+        strengths: JSON.stringify([]),
+        feedback: JSON.stringify(improvements),
+        experience: JSON.stringify(structured.experience),
+        education: JSON.stringify(structured.education),
+        atsScore,
+        summary: summaryText,
+        isActive: 1,
+        metadata: JSON.stringify({
+          grade,
+          passesATS,
+          sectionScores,
+          stats,
+          softSkills: rules.softSkills,
+          missingKeywords: rules.missingKeywords,
+          pagesExtracted,
+          totalPages,
+        }),
+      },
     });
 
     scoreExistingJobs(
@@ -691,8 +781,10 @@ Max 60 words per fix. Use \\n for newlines.`;
         improvements,
         sectionScores,
         stats,
-        experience: [],
-        education:  [],
+        experience: structured.experience,
+        education:  structured.education,
+        pagesExtracted,
+        totalPages,
       },
     });
   } catch (err: any) {
@@ -712,15 +804,15 @@ async function scoreExistingJobs(
   rawText: string
 ) {
   try {
-    const { jobs, jobMatches }                        = await import("@/db/schema");
-    const { eq, and }                                 = await import("drizzle-orm");
     const { computeMatchScore, resetGroqCallCounter } = await import("@/lib/job-matcher");
-    const { randomUUID }                              = await import("crypto");
+    const { randomUUID } = await import("crypto");
 
-    const allJobs = await db.query.jobs.findMany({ where: eq(jobs.isActive, true) });
+    const allJobs = await prisma.job.findMany({
+      where: { userId, isActive: 1 },
+    });
     if (allJobs.length === 0) return;
 
-    console.log(`[resume] Background scoring ${allJobs.length} existing jobs...`);
+    console.log(`[resume] Background scoring ${allJobs.length} cached jobs...`);
     resetGroqCallCounter();
 
     const BATCH = 3;
@@ -730,22 +822,27 @@ async function scoreExistingJobs(
       await Promise.all(
         allJobs.slice(i, i + BATCH).map(async (job) => {
           try {
-            const exists = await db.query.jobMatches.findFirst({
-              where: and(eq(jobMatches.jobId, job.id), eq(jobMatches.resumeId, resumeId)),
+            const exists = await prisma.jobMatch.findFirst({
+              where: { jobId: job.id, resumeId },
             });
             if (exists) return;
 
             const { score, reason } = await computeMatchScore(
               skills, rawText, job.title, job.description,
-              JSON.parse(job.requiredSkills)
+              JSON.parse(job.requiredSkills),
             );
-            await db.insert(jobMatches).values({
-              id: randomUUID(), userId,
-              jobId: job.id, resumeId,
-              matchScore: score, matchReason: reason,
+            await prisma.jobMatch.create({
+              data: {
+                id: randomUUID(),
+                userId,
+                jobId: job.id,
+                resumeId,
+                matchScore: score,
+                matchReason: reason,
+              },
             });
           } catch { /* non-fatal */ }
-        })
+        }),
       );
       if (i + BATCH < allJobs.length) {
         await new Promise((r) => setTimeout(r, DELAY));

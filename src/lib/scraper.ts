@@ -80,6 +80,90 @@ function toLocationType(isRemote: boolean, title = "", location = ""): "Remote" 
   return "On-site";
 }
 
+// ─── Enabled sources (from .env JOBS_ENABLED_SOURCES) ────────────────────────
+
+import {
+  buildDescription,
+  fetchGoogleJobsFromSerpApi,
+  getSerpApiKey,
+  resolveApplyUrl,
+  resolvePostedAt,
+  resolveSalary,
+} from "./serpapi-jobs";
+
+type JobSource = "serpapi" | "remotive" | "adzuna" | "jsearch" | "arbeitnow";
+
+function getEnabledSources(): JobSource[] {
+  const hasSerpApi = !!getSerpApiKey();
+  const raw = process.env.JOBS_ENABLED_SOURCES?.trim();
+
+  if (raw) {
+    const parsed = raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s): s is JobSource =>
+        ["serpapi", "remotive", "adzuna", "jsearch", "arbeitnow"].includes(s),
+      );
+    if (parsed.length > 0) {
+      // SerpAPI first when configured (real Google Jobs listings)
+      if (hasSerpApi && parsed.includes("serpapi")) {
+        return ["serpapi", ...parsed.filter((s) => s !== "serpapi")];
+      }
+      return parsed;
+    }
+  }
+
+  // Default: Google Jobs via SerpAPI when API key is present
+  if (hasSerpApi) return ["serpapi"];
+
+  const defaults: JobSource[] = ["remotive"];
+  if (process.env.ADZUNA_APP_ID && process.env.ADZUNA_API_KEY) {
+    defaults.push("adzuna");
+  }
+  return defaults;
+}
+
+// ─── SerpAPI → Google Jobs (real listings) ───────────────────────────────────
+
+async function fetchSerpApi(queries: string[]): Promise<ScrapedJob[]> {
+  const listings = await fetchGoogleJobsFromSerpApi(queries);
+  const results: ScrapedJob[] = [];
+
+  for (const j of listings) {
+    const applyUrl = resolveApplyUrl(j);
+    if (!applyUrl) continue;
+
+    const description = stripHtml(buildDescription(j), 4000);
+    const location = j.location ?? "Unknown";
+    const schedule = (j.detected_extensions?.schedule_type ?? "").toLowerCase();
+    const remote =
+      location.toLowerCase().includes("remote") ||
+      schedule.includes("remote") ||
+      /remote/i.test(description.slice(0, 500));
+
+    const via = j.via ?? j.apply_options?.[0]?.title ?? "Google Jobs";
+
+    results.push({
+      id: `serpapi_${j.job_id ?? `${j.title}_${j.company_name}`.slice(0, 80)}`,
+      title: j.title!,
+      company: j.company_name ?? "Unknown",
+      location: remote ? "Remote" : location,
+      locationType: toLocationType(remote, j.title, location),
+      salary: resolveSalary(j),
+      description,
+      url: applyUrl,
+      postedAt: resolvePostedAt(j),
+      source: `Google Jobs · ${via}`,
+      remote,
+      country: remote ? "REMOTE" : "Global",
+      requiredSkills: extractSkills(description),
+    });
+  }
+
+  console.log(`[scraper] Google Jobs (SerpAPI): ${results.length} listings`);
+  return results;
+}
+
 // ─── 1. JSearch (RapidAPI) ───────────────────────────────────────────────────
 
 type JSearchJob = {
@@ -341,18 +425,31 @@ async function fetchAdzuna(queries: string[]): Promise<ScrapedJob[]> {
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
+const SOURCE_FETCHERS: Record<
+  JobSource,
+  (queries: string[]) => Promise<ScrapedJob[]>
+> = {
+  serpapi: fetchSerpApi,
+  remotive: fetchRemotive,
+  adzuna: fetchAdzuna,
+  jsearch: fetchJSearch,
+  arbeitnow: fetchArbeitnow,
+};
+
 export async function scrapeAll(options: ScrapeOptions): Promise<ScrapedJob[]> {
   const { queries } = options;
-  console.log(`[scraper] Scraping for queries: ${queries.join(" | ")}`);
+  const enabled = getEnabledSources();
+  console.log(
+    `[scraper] Sources: ${enabled.join(", ")} | Queries: ${queries.join(" | ")}`,
+  );
 
-  const [jsearch, remotive, arbeitnow, adzuna] = await Promise.allSettled([
-    fetchJSearch(queries),
-    fetchRemotive(queries),
-    fetchArbeitnow(queries),
-    fetchAdzuna(queries),
-  ]).then((r) => r.map((res) => (res.status === "fulfilled" ? res.value : [])));
+  const batches = await Promise.allSettled(
+    enabled.map((source) => SOURCE_FETCHERS[source](queries)),
+  );
 
-  const all = [...jsearch, ...remotive, ...arbeitnow, ...adzuna];
+  const all = batches.flatMap((res) =>
+    res.status === "fulfilled" ? res.value : [],
+  );
   console.log(`[scraper] Total before dedup: ${all.length}`);
 
   const final = dedup(all).sort(

@@ -9,7 +9,14 @@ import {
   FileText, AlertCircle, ChevronDown
 } from "lucide-react";
 
-type Job = { id: string; title: string; company: string };
+type Job = {
+  id: string;
+  title: string;
+  company: string;
+  location?: string;
+  source?: string;
+  matchScore?: number | null;
+};
 type Letter = { id: string; jobId: string; jobTitle: string; company: string; tone: string; content: string };
 
 const TONES = [
@@ -32,21 +39,24 @@ export default function CoverLetters() {
   const [hasResume, setHasResume] = useState(true);
 
   useEffect(() => {
-    // Load saved jobs + existing letters in parallel
-    Promise.all([
-      fetch("/api/jobs?filter=all").then((r) => r.json()),
-      fetch("/api/cover/generate").then((r) => r.json()),
-    ]).then(([jobsData, lettersData]) => {
-      // Show only saved jobs or all jobs if none saved
-      const allJobs: any[] = jobsData.jobs ?? [];
-      setHasResume(jobsData.hasResume ?? false);
-      // Use saved jobs first, fallback to top scored
-      const saved = allJobs.filter((j) => j.saved);
-      setJobs((saved.length > 0 ? saved : allJobs.slice(0, 8)).map((j: any) => ({
-        id: j.id, title: j.title, company: j.company,
-      })));
-      setHistory(lettersData.letters ?? []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/cover/generate")
+      .then((r) => r.json())
+      .then((data) => {
+        setHasResume(data.hasResume ?? true);
+        setJobs(
+          (data.savedJobs ?? []).map((j: Job) => ({
+            id: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            source: j.source,
+            matchScore: j.matchScore,
+          })),
+        );
+        setHistory(data.letters ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const handleGenerate = async () => {
@@ -154,8 +164,17 @@ export default function CoverLetters() {
           </div>
 
           {jobs.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <p>No jobs yet. <button onClick={() => router.push("/dashboard/jobs")} className="text-accent underline underline-offset-2">Scan for jobs first</button></p>
+            <div className="text-center py-8 text-sm text-muted-foreground space-y-2">
+              <p>No saved jobs yet.</p>
+              <p>
+                <button
+                  onClick={() => router.push("/dashboard/jobs")}
+                  className="text-accent underline underline-offset-2"
+                >
+                  Go to Jobs
+                </button>
+                {" "}and bookmark roles you want cover letters for.
+              </p>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
@@ -172,7 +191,10 @@ export default function CoverLetters() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{job.title}</p>
-                    <p className="text-xs text-muted-foreground">{job.company}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {job.company}
+                      {job.location ? ` · ${job.location}` : ""}
+                    </p>
                   </div>
                   {selectedJob?.id === job.id && <Check className="w-4 h-4 text-accent ml-auto flex-shrink-0" />}
                 </button>

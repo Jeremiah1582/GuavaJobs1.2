@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { parseApiResponse } from "@/lib/parse-api-response";
 import {
   Target, ArrowLeft, MapPin, Clock, Building2, ExternalLink,
   Search, SlidersHorizontal, Bookmark, BookmarkCheck,
@@ -28,6 +29,7 @@ type ScrapeRun = {
   status: "running" | "done" | "error";
   jobsFound?: number;
   finishedAt?: string;
+  error?: string | null;
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -62,39 +64,62 @@ export default function JobMatcher() {
   const [hasResume, setHasResume] = useState(false);
   const [scrapeRun, setScrapeRun] = useState<ScrapeRun | null>(null);
   const [scraping, setScraping] = useState(false);
+  const [error, setError] = useState("");
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
       const params = new URLSearchParams({ filter });
       if (search) params.set("search", search);
       const res = await fetch(`/api/jobs?${params}`);
-      const data = await res.json();
+      const data = await parseApiResponse<{
+        jobs?: Job[];
+        hasResume?: boolean;
+        error?: string;
+      }>(res);
+      if (!res.ok) throw new Error(data.error ?? "Failed to load jobs.");
       setJobs(data.jobs ?? []);
       setHasResume(data.hasResume ?? false);
-    } catch {}
-    finally { setLoading(false); }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load jobs.");
+      setJobs([]);
+    } finally {
+      setLoading(false);
+    }
   }, [filter, search]);
 
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
-  // Poll scrape status while running
   useEffect(() => {
-    fetch("/api/jobs/scrape")
-      .then((r) => r.json())
-      .then((d) => { if (d.run) setScrapeRun(d.run); })
-      .catch(() => {});
+    (async () => {
+      try {
+        const res = await fetch("/api/jobs/scrape");
+        const data = await parseApiResponse<{ run?: ScrapeRun | null }>(res);
+        if (data.run) setScrapeRun(data.run);
+        if (data.run?.status === "running") setScraping(true);
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
 
   useEffect(() => {
     if (scrapeRun?.status !== "running") return;
     const interval = setInterval(async () => {
-      const res = await fetch("/api/jobs/scrape");
-      const data = await res.json();
-      setScrapeRun(data.run);
-      if (data.run?.status !== "running") {
+      try {
+        const res = await fetch("/api/jobs/scrape");
+        const data = await parseApiResponse<{ run?: ScrapeRun | null }>(res);
+        setScrapeRun(data.run ?? null);
+        if (data.run?.status !== "running") {
+          setScraping(false);
+          if (data.run?.status === "error" && data.run.error) {
+            setError(data.run.error);
+          }
+          fetchJobs();
+        }
+      } catch {
         setScraping(false);
-        fetchJobs();
       }
     }, 3000);
     return () => clearInterval(interval);
@@ -113,8 +138,8 @@ export default function JobMatcher() {
       if (elapsed >= 60000) { clearInterval(interval); return; } // 60s safety cutoff
 
       fetch(`/api/jobs?${new URLSearchParams({ filter, ...(search ? { search } : {}) })}`)
-        .then(r => r.json())
-        .then(data => {
+        .then((r) => parseApiResponse<{ jobs?: Job[] }>(r))
+        .then((data) => {
           const updated: Job[] = data.jobs ?? [];
           // Only update scores — don't re-sort while user is browsing
           setJobs(prev => prev.map(job => {
@@ -136,22 +161,58 @@ export default function JobMatcher() {
 
   const triggerScrape = async () => {
     setScraping(true);
+    setError("");
     try {
       const res = await fetch("/api/jobs/scrape", { method: "POST" });
-      const data = await res.json();
-      if (res.status === 409) { setScraping(false); return; }
+      const data = await parseApiResponse<{ error?: string; message?: string }>(res);
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not start job scan.");
+      }
       setScrapeRun({ status: "running" });
-    } catch { setScraping(false); }
+    } catch (err: unknown) {
+      setScraping(false);
+      setError(err instanceof Error ? err.message : "Could not start job scan.");
+    }
   };
 
-  const toggleSave = async (id: string) => {
-    // Optimistic update
-    setJobs((prev) => prev.map((j) => j.id === id ? { ...j, saved: !j.saved } : j));
+  const toggleSave = async (job: Job) => {
+    const prevSaved = job.saved;
+    setJobs((prev) =>
+      prev.map((j) => (j.id === job.id ? { ...j, saved: !prevSaved } : j)),
+    );
     try {
-      await fetch(`/api/jobs/${id}/save`, { method: "POST" });
-    } catch {
-      // Revert on failure
-      setJobs((prev) => prev.map((j) => j.id === id ? { ...j, saved: !j.saved } : j));
+      const res = await fetch(`/api/jobs/${encodeURIComponent(job.id)}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: job.source,
+          snapshot: {
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            locationType: job.type,
+            description: "",
+            url: job.url,
+            source: job.source,
+            requiredSkills: job.tags,
+          },
+        }),
+      });
+      const data = await parseApiResponse<{ saved?: boolean; error?: string }>(res);
+      if (!res.ok) throw new Error(data.error ?? "Could not update bookmark.");
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id ? { ...j, saved: data.saved ?? !prevSaved } : j,
+        ),
+      );
+    } catch (err: unknown) {
+      setJobs((prev) =>
+        prev.map((j) => (j.id === job.id ? { ...j, saved: prevSaved } : j)),
+      );
+      setError(
+        err instanceof Error ? err.message : "Could not update bookmark.",
+      );
     }
   };
 
@@ -186,6 +247,17 @@ export default function JobMatcher() {
       </div>
 
       <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-6">
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-sm text-destructive"
+          >
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </motion.div>
+        )}
+
         {/* No resume banner */}
         {!hasResume && (
           <motion.div
@@ -212,7 +284,7 @@ export default function JobMatcher() {
             className="flex items-center gap-3 p-4 rounded-xl border border-accent/20 bg-accent/5 text-sm"
           >
             <Loader2 className="w-4 h-4 text-accent animate-spin flex-shrink-0" />
-            <span className="text-accent">Scanning internships from Greenhouse, Lever, Wellfound… This takes ~30 seconds.</span>
+            <span className="text-accent">Fetching real listings from Google Jobs (SerpAPI)… This can take 30–90 seconds.</span>
           </motion.div>
         )}
 
@@ -244,9 +316,9 @@ export default function JobMatcher() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {loading ? "Loading…" : `${jobs.length} internships found`}
+          {loading ? "Loading…" : `${jobs.length} real listings`}
           {scrapeRun?.status === "done" && scrapeRun.jobsFound !== undefined && (
-            <span className="ml-2 text-green-600">· Last scan found {scrapeRun.jobsFound} new jobs</span>
+            <span className="ml-2 text-green-600">· Last scan cached {scrapeRun.jobsFound} from Google Jobs</span>
           )}
         </p>
 
@@ -262,7 +334,9 @@ export default function JobMatcher() {
             </div>
             <p className="text-sm font-medium text-muted-foreground mb-1">No jobs found</p>
             <p className="text-xs text-muted-foreground/60">
-              {search ? "Try a different search term." : `Click "Scan Jobs" to fetch the latest internships.`}
+              {search
+                ? "Try a different search term."
+                : `Click "Scan Jobs" to fetch real listings from Google Jobs (SerpAPI).`}
             </p>
           </div>
         ) : (
@@ -305,7 +379,7 @@ export default function JobMatcher() {
                     <ScoreBadge score={job.matchScore} />
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleSave(job.id)}
+                        onClick={() => toggleSave(job)}
                         className="w-8 h-8 rounded-lg border border-border grid place-items-center hover:bg-secondary transition-colors"
                       >
                         {job.saved

@@ -2,10 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: [
-    "pdf-parse",
     "pdfjs-dist",
     "better-sqlite3",
-    "drizzle-orm/better-sqlite3",
+    "@prisma/client",
+    "@prisma/adapter-better-sqlite3",
   ],
   reactCompiler: true,
 

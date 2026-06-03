@@ -1,21 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Home, ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   const router = useRouter();
-  // Check login state client-side only (SSR safe)
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem("internhunt_user"));
-    //console.error("404 Error: page not found");
-  }, []);
-
-  const homeLabel = isLoggedIn ? "Go to Dashboard" : "Return to Home";
-  const homePath = isLoggedIn ? "/dashboard" : "/";
+  const homeLabel = "Go to Dashboard";
+  const homePath = "/dashboard";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

@@ -8,7 +8,7 @@ import {
   LogOut, ChevronRight, TrendingUp, Clock, Sparkles,
   Upload, ArrowRight, BarChart3, Zap, CheckCircle, AlertCircle,
 } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
+import { DEV_USER } from "@/lib/dev-user";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -104,7 +104,7 @@ const quickActions = [
     desc: "Ask anything — role advice, interview prep, offer comparisons.",
     cta: "Start Chatting", href: "/dashboard/chat",
     accent: "from-purple-500/10 to-purple-600/5", border: "border-purple-500/20",
-    iconBg: "bg-purple-500/10", iconColor: "text-purple-400", badge: "Groq Powered",
+    iconBg: "bg-purple-500/10", iconColor: "text-purple-400", badge: "AI Powered",
   },
 ];
 
@@ -118,14 +118,14 @@ const tips = [
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 function Sidebar({
-  collapsed, setCollapsed, displayName, email, initials, onLogout,
+  collapsed, setCollapsed, displayName, email, initials, onHome,
 }: {
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
   displayName: string;
   email: string;
   initials: string;
-  onLogout: () => void;
+  onHome: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -204,15 +204,15 @@ function Sidebar({
       {/* Bottom */}
       <div className="flex-shrink-0 border-t border-primary-foreground/10 p-3 space-y-1">
         <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary-foreground/50 hover:bg-destructive/20 hover:text-destructive transition-colors"
+          onClick={onHome}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary-foreground/50 hover:bg-primary-foreground/10 hover:text-primary-foreground transition-colors"
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="text-sm font-medium whitespace-nowrap">
-                Sign out
+                Back to home
               </motion.span>
             )}
           </AnimatePresence>
@@ -250,12 +250,7 @@ export default function Dashboard() {
     avgMatchScore: null, hasResume: false, activity: [],
   });
 
-  const { data: session, isPending } = authClient.useSession();
-
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!isPending && !session?.user) router.push("/login");
-  }, [session, isPending, router]);
+  const user = DEV_USER;
 
   // Rotate tips
   useEffect(() => {
@@ -265,7 +260,6 @@ export default function Dashboard() {
 
   // Load real stats from APIs
   useEffect(() => {
-    if (!session?.user) return;
     (async () => {
       setStatsLoading(true);
       try {
@@ -318,24 +312,10 @@ export default function Dashboard() {
         setStatsLoading(false);
       }
     })();
-  }, [session?.user]);
+  }, []);
 
-  const handleLogout = async () => {
-    await authClient.signOut();
-    router.push("/");
-  };
+  const handleHome = () => router.push("/");
 
-  // Loading spinner while Better Auth resolves
-  if (isPending) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (!session?.user) return null;
-
-  const user = session.user;
   const displayName = formatName(user.name, user.email);
   const initials = getInitials(user.name, user.email);
   const firstName = displayName.split(" ")[0];
@@ -377,7 +357,7 @@ export default function Dashboard() {
       <Sidebar
         collapsed={collapsed} setCollapsed={setCollapsed}
         displayName={displayName} email={user.email ?? ""}
-        initials={initials} onLogout={handleLogout}
+        initials={initials} onHome={handleHome}
       />
 
       <motion.main
@@ -493,7 +473,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-display text-lg font-semibold">Tools</h2>
               <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-accent" /> Powered by Groq
+                <Zap className="w-3 h-3 text-accent" /> Powered by OpenRouter
               </span>
             </div>
             <div className="grid md:grid-cols-2 gap-4">

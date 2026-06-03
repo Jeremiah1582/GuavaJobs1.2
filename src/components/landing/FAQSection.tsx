@@ -7,7 +7,7 @@ import SectionHeading from "./SectionHeading";
 const faqs = [
   {
     q: "Is InternHunt really free?",
-    a: "Yes, 100% free. The AI runs locally on your machine using Groq's generous free tier. No subscriptions, no hidden costs.",
+    a: "Yes, 100% free to use. AI features run through OpenRouter with your own API key. No subscriptions required for the app itself.",
   },
   {
     q: "Is my resume data safe?",

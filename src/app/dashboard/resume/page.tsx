@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { parseApiResponse } from "@/lib/parse-api-response";
 import {
   FileText, Upload, CheckCircle, AlertTriangle, ArrowLeft,
   Star, TrendingUp, FileUp, Loader2, BarChart3, Award,
@@ -60,23 +61,11 @@ type ResumeResult = {
   education: { degree: string; institution: string; year: string; gpa?: string }[];
 };
 
-// ─── PDF extraction ───────────────────────────────────────────────────────────
-
-async function extractTextFromPDF(file: File): Promise<string> {
-  const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://unpkg.com/pdfjs-dist@5.5.207/build/pdf.worker.min.mjs";
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-
-  let text = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page    = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map((item: any) => item.str ?? "").join(" ") + "\n";
-  }
-  return text.replace(/\n+/g, "\n").replace(/\s{2,}/g, " ").trim();
+function isPdfFile(file: File): boolean {
+  return (
+    file.type === "application/pdf" ||
+    file.name.toLowerCase().endsWith(".pdf")
+  );
 }
 
 // ─── Score ring ───────────────────────────────────────────────────────────────
@@ -380,21 +369,21 @@ export default function ResumeAnalyzer() {
   const router = useRouter();
   const [file, setFile]               = useState<File | null>(null);
   const [dragOver, setDragOver]       = useState(false);
-  const [status, setStatus]           = useState<"idle" | "extracting" | "analyzing" | "done" | "error">("idle");
+  const [status, setStatus]           = useState<"idle" | "analyzing" | "done" | "error">("idle");
   const [result, setResult]           = useState<ResumeResult | null>(null);
   const [error, setError]             = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/resume")
-      .then((r) => r.json())
+      .then((r) => parseApiResponse<{ resume?: ResumeResult }>(r))
       .then((data) => { if (data.resume) setResult(data.resume); })
       .catch(() => {})
       .finally(() => setInitialLoading(false));
   }, []);
 
   const handleFile = useCallback((f: File) => {
-    if (f.type !== "application/pdf") { setError("Please upload a PDF file."); return; }
+    if (!isPdfFile(f)) { setError("Please upload a PDF file."); return; }
     if (f.size > 5 * 1024 * 1024)    { setError("File too large. Max 5MB.");   return; }
     setFile(f); setError(""); setResult(null); setStatus("idle");
   }, []);
@@ -409,26 +398,12 @@ export default function ResumeAnalyzer() {
     if (!file) return;
     setError("");
 
-    setStatus("extracting");
-    let rawText = "";
-    try {
-      rawText = await extractTextFromPDF(file);
-    } catch {
-      setError("Could not read this PDF. Please try a different file.");
-      setStatus("error"); return;
-    }
-    if (!rawText || rawText.length < 50) {
-      setError("PDF appears to be empty or image-only. Please use a text-based PDF.");
-      setStatus("error"); return;
-    }
-
     setStatus("analyzing");
     const formData = new FormData();
     formData.append("resume", file);
-    formData.append("rawText", rawText);
     try {
       const res  = await fetch("/api/resume/upload", { method: "POST", body: formData });
-      const data = await res.json();
+      const data = await parseApiResponse<{ error?: string; resume?: ResumeResult }>(res);
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
       setResult(data.resume);
       setFile(null);
@@ -447,7 +422,7 @@ export default function ResumeAnalyzer() {
     );
   }
 
-  const isAnalyzing = status === "extracting" || status === "analyzing";
+  const isAnalyzing = status === "analyzing";
 
   return (
     <div className="min-h-screen bg-background">
@@ -512,7 +487,7 @@ export default function ResumeAnalyzer() {
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin text-accent" />
                     <p className="text-sm text-muted-foreground">
-                      {status === "extracting" ? "Extracting text from PDF…" : "Running enterprise ATS scan…"}
+                      Running enterprise ATS scan…
                     </p>
                     <p className="text-xs text-muted-foreground/60">
                       {status === "analyzing" ? "Checking sections, keywords, formatting, quantification…" : ""}

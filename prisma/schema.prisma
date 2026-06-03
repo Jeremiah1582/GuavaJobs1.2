@@ -1,0 +1,242 @@
+// Prisma schema — mirrors src/db/schema.ts (post–drizzle/0003).
+// Timestamps: INTEGER Unix milliseconds (Drizzle `timestamp_ms`).
+// Booleans: INTEGER 0/1 (`email_verified`, `is_active`) to match existing SQLite rows.
+// Generator output: src/generated/prisma
+//
+// Intentionally omitted: Drizzle `__migrations` table (replaced by `_prisma_migrations`).
+// Legacy DBs may still have `jobs_url_unique` on `jobs.url`; not in Drizzle schema — dropped in baseline migration.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Better Auth tables ───────────────────────────────────────────────────────
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique(map: "user_email_unique")
+  emailVerified Int      @default(0) @map("email_verified")
+  image         String?
+  createdAt     Int      @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("created_at")
+  updatedAt     Int      @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("updated_at")
+
+  sessions      Session[]
+  accounts      Account[]
+  resumes       Resume[]
+  jobs          Job[]
+  jobMatches    JobMatch[]
+  savedJobs     SavedJob[]
+  appliedJobs   AppliedJob[]
+  coverLetters  CoverLetter[]
+  chatMessages  ChatMessage[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String  @id
+  expiresAt Int     @map("expires_at")
+  token     String  @unique(map: "session_token_unique")
+  createdAt Int     @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("created_at")
+  updatedAt Int     @map("updated_at")
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+  userId    String  @map("user_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "session_userId_idx")
+  @@map("session")
+}
+
+model Account {
+  id                    String  @id
+  accountId             String  @map("account_id")
+  providerId            String  @map("provider_id")
+  userId                String  @map("user_id")
+  accessToken           String? @map("access_token")
+  refreshToken          String? @map("refresh_token")
+  idToken               String? @map("id_token")
+  accessTokenExpiresAt  Int?    @map("access_token_expires_at")
+  refreshTokenExpiresAt Int?    @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             Int     @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("created_at")
+  updatedAt             Int     @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "account_userId_idx")
+  @@map("account")
+}
+
+model Verification {
+  id         String @id
+  identifier String
+  value      String
+  expiresAt  Int    @map("expires_at")
+  createdAt  Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("created_at")
+  updatedAt  Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("updated_at")
+
+  @@index([identifier], map: "verification_identifier_idx")
+  @@map("verification")
+}
+
+// ─── Resumes ──────────────────────────────────────────────────────────────────
+
+model Resume {
+  id         String  @id
+  userId     String  @map("user_id")
+  filename   String
+  filepath   String
+  rawText    String  @map("raw_text")
+  skills     String  @default("[]")
+  keywords   String  @default("[]")
+  strengths  String  @default("[]")
+  feedback   String  @default("[]")
+  experience String  @default("[]")
+  education  String  @default("[]")
+  atsScore   Int?    @map("ats_score")
+  summary    String?
+  isActive   Int     @default(1) @map("is_active")
+  uploadedAt Int     @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("uploaded_at")
+  metadata   String  @default("{}")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobMatches   JobMatch[]
+  coverLetters CoverLetter[]
+
+  @@index([userId], map: "resumes_userId_idx")
+  @@map("resumes")
+}
+
+// ─── Job cache ────────────────────────────────────────────────────────────────
+
+model Job {
+  id             String  @id
+  userId         String? @map("user_id")
+  title          String
+  company        String
+  location       String  @default("")
+  locationType   String  @default("Unknown") @map("location_type")
+  description    String  @default("")
+  url            String
+  source         String
+  requiredSkills String  @default("[]") @map("required_skills")
+  postedAt       Int?    @map("posted_at")
+  scrapedAt      Int     @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("scraped_at")
+  isActive       Int     @default(1) @map("is_active")
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobMatches   JobMatch[]
+  coverLetters CoverLetter[]
+
+  @@index([userId], map: "jobs_userId_idx")
+  @@index([source], map: "jobs_source_idx")
+  @@index([company], map: "jobs_company_idx")
+  @@map("jobs")
+}
+
+// ─── Job matches ──────────────────────────────────────────────────────────────
+
+model JobMatch {
+  id          String @id
+  userId      String @map("user_id")
+  jobId       String @map("job_id")
+  resumeId    String @map("resume_id")
+  matchScore  Int    @map("match_score")
+  matchReason String @default("") @map("match_reason")
+  computedAt  Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("computed_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "job_matches_userId_idx")
+  @@index([jobId], map: "job_matches_jobId_idx")
+  @@map("job_matches")
+}
+
+// ─── Saved / applied jobs ─────────────────────────────────────────────────────
+
+model SavedJob {
+  id            String @id
+  userId        String @map("user_id")
+  jobExternalId String @map("job_external_id")
+  source        String
+  snapshot      String @default("{}")
+  savedAt       Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("saved_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobExternalId], map: "saved_jobs_user_job_idx")
+  @@index([userId], map: "saved_jobs_userId_idx")
+  @@map("saved_jobs")
+}
+
+model AppliedJob {
+  id            String @id
+  userId        String @map("user_id")
+  jobExternalId String @map("job_external_id")
+  source        String
+  appliedAt     Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("applied_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobExternalId], map: "applied_jobs_user_job_idx")
+  @@index([userId], map: "applied_jobs_userId_idx")
+  @@map("applied_jobs")
+}
+
+// ─── Cover letters ────────────────────────────────────────────────────────────
+
+model CoverLetter {
+  id          String @id
+  userId      String @map("user_id")
+  jobId       String @map("job_id")
+  resumeId    String @map("resume_id")
+  content     String
+  tone        String @default("professional")
+  generatedAt Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("generated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "cover_letters_userId_idx")
+  @@map("cover_letters")
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+model ChatMessage {
+  id        String @id
+  userId    String @map("user_id")
+  role      String
+  content   String
+  createdAt Int    @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "chat_messages_userId_idx")
+  @@map("chat_messages")
+}
+
+// ─── Scrape runs ──────────────────────────────────────────────────────────────
+
+model ScrapeRun {
+  id         String  @id
+  startedAt  Int     @default(dbgenerated("(cast(unixepoch('subsecond') * 1000 as integer))")) @map("started_at")
+  finishedAt Int?    @map("finished_at")
+  jobsFound  Int?    @default(0) @map("jobs_found")
+  status     String  @default("running")
+  error      String?
+
+  @@map("scrape_runs")
+}

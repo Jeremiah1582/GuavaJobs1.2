@@ -143,7 +143,7 @@ export default function KineticHero() {
           >
             <MagneticWrapper strength={0.25}>
               {/* next/link replaces useNavigate */}
-              <Link href="/login">
+              <Link href="/dashboard">
                 <motion.span
                   whileHover={{ scale: 1.05, y: -3 }}
                   whileTap={{ scale: 0.97 }}

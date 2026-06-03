@@ -1,13 +1,12 @@
-// src/lib/session.ts
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+// src/lib/session.ts — auth disabled; always use the local dev user
+import { ensureDevUser } from "@/lib/dev-user.server";
+import type { AppUser } from "@/lib/dev-user";
 
 export async function getSession() {
-  return auth.api.getSession({ headers: await headers() });
+  const user = await ensureDevUser();
+  return { user };
 }
 
-export async function requireAuth() {
-  const session = await getSession();
-  if (!session?.user) throw new Error("UNAUTHORIZED");
-  return session.user;
+export async function requireAuth(): Promise<AppUser> {
+  return ensureDevUser();
 }

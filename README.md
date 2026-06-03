@@ -68,7 +68,7 @@ InternHunt is a full-stack web app that helps students find and land internships
 | **Framework** | Next.js 16 (App Router, Turbopack) |
 | **Language** | TypeScript |
 | **Auth** | Better Auth v1.2 (Email OTP) |
-| **Database** | SQLite + Drizzle ORM |
+| **Database** | SQLite + Prisma 7 |
 | **AI / LLM** | Groq API (llama-3.3-70b, llama-3.1-8b-instant) |
 | **PDF Parsing** | pdfjs-dist v5 (client-side, no server upload needed) |
 | **Styling** | Tailwind CSS + custom design system |
@@ -115,8 +115,8 @@ GROQ_API_KEY=gsk_your_groq_key_here
 ### Run Locally
 
 ```bash
-# Push database schema
-npx drizzle-kit push
+# Apply database migrations
+npm run db:migrate:deploy
 
 # Start dev server
 npm run dev
@@ -194,7 +194,7 @@ src/
 │   ├── job-matcher.ts        # Rate-limit aware match scorer
 │   └── scraper.ts            # Job board scraper
 └── db/
-    ├── schema.ts             # Drizzle schema
+    prisma/schema.prisma      # Prisma schema
     └── index.ts              # DB client
 ```
 

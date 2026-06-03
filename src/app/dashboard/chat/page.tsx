@@ -181,7 +181,7 @@ export default function AIAssistant() {
               <MessageSquare className="w-5 h-5 text-purple-400" /> AI Career Assistant
             </h1>
             <p className="text-xs text-muted-foreground">
-              Powered by Groq Llama 3.3 — asks anything about your career
+              Powered by OpenRouter — ask anything about your career
             </p>
           </div>
           {messages.length > 0 && (

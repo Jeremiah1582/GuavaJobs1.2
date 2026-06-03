@@ -1,11 +1,9 @@
 // src/app/api/resume/route.ts
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
-import { db } from "@/db";
-import { resumes } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { prisma } from "@/db";
+import type { Resume } from "@/generated/prisma";
 
-// ─── Grade helper (must match upload route) ───────────────────────────────────
 function scoreToGrade(score: number): string {
   return score >= 90 ? "A"  :
          score >= 80 ? "B+" :
@@ -14,7 +12,6 @@ function scoreToGrade(score: number): string {
          score >= 50 ? "C"  : "D";
 }
 
-// ─── Safe JSON parse with fallback ────────────────────────────────────────────
 function safeJSON<T>(raw: string | null | undefined, fallback: T): T {
   try {
     if (!raw) return fallback;
@@ -24,9 +21,7 @@ function safeJSON<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
-// ─── Parse DB row into full ResumeResult shape ────────────────────────────────
-function parseResume(r: typeof resumes.$inferSelect) {
-  // metadata column stores: { sectionScores, stats, grade, passesATS, softSkills }
+function parseResume(r: Resume) {
   const meta = safeJSON<{
     sectionScores?: Record<string, number>;
     stats?: {
@@ -49,7 +44,6 @@ function parseResume(r: typeof resumes.$inferSelect) {
   const experience      = safeJSON<unknown[]>(r.experience, []);
   const education       = safeJSON<unknown[]>(r.education, []);
 
-  // grade and passesATS: prefer stored meta, fallback to recalculate from atsScore
   const grade     = meta.grade     ?? scoreToGrade(r.atsScore ?? 0);
   const passesATS = meta.passesATS ?? (r.atsScore ?? 0) >= 65;
 
@@ -74,17 +68,16 @@ function parseResume(r: typeof resumes.$inferSelect) {
   };
 }
 
-// ─── GET /api/resume ──────────────────────────────────────────────────────────
 export async function GET() {
   try {
     const user = await requireAuth();
-    const resume = await db.query.resumes.findFirst({
-      where: and(eq(resumes.userId, user.id), eq(resumes.isActive, true)),
-      orderBy: (r, { desc }) => [desc(r.uploadedAt)],
+    const resume = await prisma.resume.findFirst({
+      where: { userId: user.id, isActive: 1 },
+      orderBy: { uploadedAt: "desc" },
     });
     return NextResponse.json({ resume: resume ? parseResume(resume) : null });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED")
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED")
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     return NextResponse.json({ error: "Failed to fetch resume." }, { status: 500 });
   }

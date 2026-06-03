@@ -1,0 +1,54 @@
+{
+  "basics": {
+    "name": "Jeremiah P. Brown",
+    "label": "Full Stack Developer | JavaScript & Python",
+    "email": null,
+    "phone": null,
+    "url": "https://www.jeremiahpbrown.dev",
+    "summary": "A versatile Full-Stack Developer with 4+ years of experience building scalable web applications using React, Node.js, and Python. Unique combination of technical expertise and business acumen, with 8+ years in sales and business development. Proven track record of leading teams, delivering projects on time, and driving revenue growth.",
+    "location": {
+      "countryCode": "UK/EU"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "url": "https://github.com/JeremiahPBrown"
+      },
+      {
+        "network": "LinkedIn",
+        "url": "https://linkedin.com/in/JeremiahPBrown"
+      }
+    ]
+  },
+  "skills": [
+    {
+      "name": "Full-stack Development",
+      "keywords": ["JavaScript", "Python", "React", "Node.js"]
+    },
+    {
+      "name": "Cloud & AI",
+      "keywords": ["AI", "Cloud Architecture", "AWS"]
+    },
+    {
+      "name": "Business & Management",
+      "keywords": ["Sales", "Business Development", "Stakeholder Management", "Revenue Generation"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "ZOE Healthcare Web Platform",
+      "description": "An appointment booking system for the general public where they can keep all of their medical records securely online.",
+      "technologies": ["React", "Node.js", "Healthcare"]
+    },
+    {
+      "name": "Smart Lens Tech",
+      "description": "Software that allows you to take a picture, identify the image, and receive a second-hand price estimate.",
+      "technologies": ["AI", "Image Recognition", "Python", "Price Estimation"]
+    },
+    {
+      "name": "e-Invoiceonline.com",
+      "description": "An invoicing platform that follows the new EU standards for e-invoicing.",
+      "technologies": ["React", "Node.js", "EU Standards", "Invoicing"]
+    }
+  ]
+}

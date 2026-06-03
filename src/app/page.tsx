@@ -9,7 +9,6 @@ import Marquee from "@/components/landing/Marquee";
 import StickyFeatureShowcase from "@/components/landing/StickyFeatureShowcase";
 import FAQSection from "@/components/landing/FAQSection";
 import ScrollProgress from "@/components/landing/ScrollProgress";
-import CustomCursor from "@/components/landing/CustomCursor";
 import BentoCard from "@/components/landing/BentoCard";
 import StepCard from "@/components/landing/StepCard";
 import ScrollReveal from "@/components/landing/ScrollReveal";
@@ -39,7 +38,7 @@ const features = [
     icon: MessageSquare,
     title: "AI Chat Assistant",
     desc: '"Explain this role", "How to prepare", "Compare these offers" — your personal career advisor.',
-    detail: "Powered by Groq. Ask anything about your job search, interview prep, or career decisions.",
+    detail: "Powered by OpenRouter. Ask anything about your job search, interview prep, or career decisions.",
   },
 ];
 
@@ -70,7 +69,7 @@ function Navbar() {
           <a href="#faq" className="hover:text-foreground transition-colors kinetic-text">FAQ</a>
         </div>
         <MagneticWrapper strength={0.3}>
-          <Link href="/login">
+          <Link href="/dashboard">
             <motion.span
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.97 }}
@@ -143,10 +142,10 @@ function CTAAndFooter() {
               Ready to Find Your<br />Perfect Internship?
             </h2>
             <p className="text-lg text-muted-foreground mb-10">
-              Join InternHunt today. No passwords, no hassle — just enter your email and start hunting.
+              Join InternHunt today. Open the dashboard and start hunting — no sign-in required.
             </p>
             <MagneticWrapper>
-              <Link href="/login">
+              <Link href="/dashboard">
                 <motion.span whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.97 }}
                   className="btn-ink text-lg px-10 py-5 inline-flex items-center gap-3 mx-auto">
                   Get Started Free <ArrowRight className="w-5 h-5" />
@@ -189,7 +188,6 @@ function CTAAndFooter() {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      <CustomCursor />
       <ScrollProgress />
       <Navbar />
       <KineticHero />

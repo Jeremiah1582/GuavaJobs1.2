@@ -1,43 +1,39 @@
 // src/app/api/chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
-import { db } from "@/db";
-import { chatMessages, resumes } from "@/db/schema";
-import { groq, MODEL_SMART } from "@/lib/groq";
-import { and, eq, asc, desc } from "drizzle-orm";
+import { prisma } from "@/db";
+import { llm, MODEL_SMART } from "@/lib/llm";
 import { randomUUID } from "crypto";
+import { resumeTextForAI } from "@/lib/pdf-extract.server";
 
-// GET — load chat history
 export async function GET() {
   try {
     const user = await requireAuth();
-    const messages = await db.query.chatMessages.findMany({
-      where: eq(chatMessages.userId, user.id),
-      orderBy: [asc(chatMessages.createdAt)],
-      limit: 100,
+    const messages = await prisma.chatMessage.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+      take: 100,
     });
     return NextResponse.json({ messages });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED")
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED")
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     return NextResponse.json({ error: "Failed to load history." }, { status: 500 });
   }
 }
 
-// DELETE — clear all chat history for user
 export async function DELETE() {
   try {
     const user = await requireAuth();
-    await db.delete(chatMessages).where(eq(chatMessages.userId, user.id));
+    await prisma.chatMessage.deleteMany({ where: { userId: user.id } });
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED")
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED")
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     return NextResponse.json({ error: "Failed to clear chat." }, { status: 500 });
   }
 }
 
-// POST — send message, stream response
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
@@ -46,17 +42,19 @@ export async function POST(req: NextRequest) {
     if (!message?.trim())
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
 
-    // Get resume for context
-    const resume = await db.query.resumes.findFirst({
-      where: and(eq(resumes.userId, user.id), eq(resumes.isActive, true)),
+    const resume = await prisma.resume.findFirst({
+      where: { userId: user.id, isActive: 1 },
     });
 
     const resumeContext = resume
-      ? `The user has uploaded their resume:
+      ? `The user has uploaded their resume (use all sections below, including later pages):
 - Skills: ${JSON.parse(resume.skills).join(", ")}
 - ATS Score: ${resume.atsScore}/100
 - Summary: ${resume.summary ?? "Not provided"}
-- Education: ${JSON.parse(resume.education).map((e: any) => `${e.degree} at ${e.institution}`).join("; ") || "Not specified"}`
+- Education: ${JSON.parse(resume.education).map((e: { degree: string; institution: string }) => `${e.degree} at ${e.institution}`).join("; ") || "Not specified"}
+- Experience: ${JSON.parse(resume.experience).map((e: { title: string; company: string; duration: string }) => `${e.title} at ${e.company} (${e.duration})`).join("; ") || "Not specified"}
+- Full resume text:
+${resumeTextForAI(resume.rawText)}`
       : "The user has not uploaded a resume yet. Gently encourage them to upload one for personalized advice.";
 
     const systemPrompt = `You are InternHunt AI — an expert career advisor for students and early-career professionals seeking internships.
@@ -71,29 +69,34 @@ How you respond:
 - Be encouraging but honest about skill gaps
 - If asked about companies, provide real, useful insights`;
 
-    // Last 6 messages only — each message costs tokens, 20 is too many for free tier
-    const history = await db.query.chatMessages.findMany({
-      where: eq(chatMessages.userId, user.id),
-      orderBy: [desc(chatMessages.createdAt)],
-      limit: 6,
+    const history = await prisma.chatMessage.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 6,
     });
     history.reverse();
 
-    // Save user message
-    await db.insert(chatMessages).values({
-      id: randomUUID(), userId: user.id, role: "user", content: message.trim(),
+    await prisma.chatMessage.create({
+      data: {
+        id: randomUUID(),
+        userId: user.id,
+        role: "user",
+        content: message.trim(),
+      },
     });
 
-    const groqMessages: any[] = [
-      { role: "system", content: systemPrompt },
-      ...history.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user", content: message.trim() },
+    const llmMessages = [
+      { role: "system" as const, content: systemPrompt },
+      ...history.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: message.trim() },
     ];
 
-    // Stream response back
-    const stream = await groq.chat.completions.create({
+    const stream = await llm.chat.completions.create({
       model: MODEL_SMART,
-      messages: groqMessages,
+      messages: llmMessages,
       temperature: 0.7,
       max_tokens: 500,
       stream: true,
@@ -112,9 +115,13 @@ How you respond:
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
             }
           }
-          // Save completed assistant message
-          await db.insert(chatMessages).values({
-            id: randomUUID(), userId: user.id, role: "assistant", content: fullContent,
+          await prisma.chatMessage.create({
+            data: {
+              id: randomUUID(),
+              userId: user.id,
+              role: "assistant",
+              content: fullContent,
+            },
           });
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
           controller.close();
@@ -131,8 +138,8 @@ How you respond:
         "Connection": "keep-alive",
       },
     });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED")
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED")
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     console.error("[chat]", err);
     return NextResponse.json({ error: "Chat failed. Please try again." }, { status: 500 });
