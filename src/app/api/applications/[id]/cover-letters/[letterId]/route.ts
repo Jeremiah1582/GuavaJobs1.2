@@ -1,4 +1,6 @@
-import { ApiErrorCode, coverLettersService, usersService } from "@guavajobs/core"
+import { ApiErrorCode } from "@/lib/api/errors"
+import { coverLettersService } from "@/lib/applications/server"
+import { usersService } from "@/lib/users"
 
 import { getSession } from "@/lib/auth/get-session"
 import { handleServiceError } from "@/lib/api/handle-service-error"

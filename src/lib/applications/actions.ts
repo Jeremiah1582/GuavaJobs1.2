@@ -1,16 +1,18 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { PIPELINE_STATUS_OPTIONS } from "@/lib/applications"
 import {
   applicationsService,
   coverLettersService,
-  PIPELINE_STATUS_OPTIONS,
-  savedJobSearchesService,
-  usersService,
-  type EmploymentType,
-  type InterviewUpdateInput,
-  type JobCategory,
-} from "@guavajobs/core"
+} from "@/lib/applications/server"
+import type {
+  EmploymentType,
+  InterviewUpdateInput,
+  JobCategory,
+} from "@/lib/applications"
+import { savedJobSearchesService } from "@/lib/jobs"
+import { usersService } from "@/lib/users"
 import { getSession } from "@/lib/auth/get-session"
 
 export type PipelineStatus = (typeof PIPELINE_STATUS_OPTIONS)[number]
@@ -42,8 +44,8 @@ export async function refreshApplicationProfileSnapshotAction(applicationId: str
     applicationId,
   )
   revalidatePath("/dashboard")
-  revalidatePath("/applications")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath("/dashboard/applications")
+  revalidatePath(`/dashboard/applications/${applicationId}`)
   return snapshot
 }
 
@@ -54,7 +56,7 @@ export async function updateApplicationStatusAction(
   const userId = await requireUserId()
   await applicationsService.update(userId, applicationId, { status })
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function updateApplicationFieldsAction(
@@ -83,8 +85,8 @@ export async function updateApplicationFieldsAction(
   const userId = await requireUserId()
   await applicationsService.update(userId, applicationId, input)
   revalidatePath("/dashboard")
-  revalidatePath("/applications")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath("/dashboard/applications")
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function setInterviewDetailsAction(
@@ -94,42 +96,42 @@ export async function setInterviewDetailsAction(
   const userId = await requireUserId()
   await applicationsService.setInterviewDetails(userId, applicationId, input)
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function advanceApplicationStageAction(applicationId: string) {
   const userId = await requireUserId()
   await applicationsService.advanceStage(userId, applicationId)
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function rejectApplicationAction(applicationId: string) {
   const userId = await requireUserId()
   await applicationsService.rejectApplication(userId, applicationId)
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function clearApplicationRejectionAction(applicationId: string) {
   const userId = await requireUserId()
   await applicationsService.clearRejection(userId, applicationId)
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function addApplicationNoteAction(applicationId: string, body: string) {
   const userId = await requireUserId()
   await applicationsService.createNote(userId, applicationId, { body })
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function saveManualCoverLetterAction(applicationId: string, content: string) {
   const userId = await requireUserId()
   const saved = await coverLettersService.upsertLetter(userId, applicationId, { content })
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
   return saved
 }
 
@@ -141,7 +143,7 @@ export async function updateApplicationNoteAction(
   const userId = await requireUserId()
   await applicationsService.updateNote(userId, applicationId, noteId, body)
   revalidatePath("/dashboard")
-  revalidatePath(`/applications/${applicationId}`)
+  revalidatePath(`/dashboard/applications/${applicationId}`)
 }
 
 export async function deleteApplicationAction(applicationId: string) {
@@ -164,12 +166,12 @@ export async function saveJobSearchAction(input: {
     ...input,
     country: input.country ?? "gb",
   })
-  revalidatePath("/jobs")
+  revalidatePath("/dashboard/jobs")
   return saved
 }
 
 export async function deleteSavedSearchAction(id: string) {
   const userId = await requireUserId()
   await savedJobSearchesService.remove(userId, id)
-  revalidatePath("/jobs")
+  revalidatePath("/dashboard/jobs")
 }

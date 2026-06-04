@@ -1,9 +1,5 @@
-import {
-  applicationsService,
-  coverLettersService,
-  profileService,
-  type ProfileCompleteness,
-} from "@guavajobs/core"
+import { applicationsService, coverLettersService } from "@/lib/applications/server"
+import { profileService, type ProfileCompleteness } from "@/lib/profile"
 
 const PROFILE_READY_PERCENT = 80
 

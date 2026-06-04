@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import {
   ProfileUrlImportError,
   importProfileFromUrl,
-} from "@guavajobs/core/profile-url-import"
+} from "@/lib/profile/url-import"
 
 import { getSession } from "@/lib/auth/get-session"
 import { devErrorDetails, isDevMode } from "@/lib/dev-mode"

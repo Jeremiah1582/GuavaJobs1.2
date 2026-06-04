@@ -1,26 +1,23 @@
-import { API_VERSION, getDb, isDatabaseConfigured } from "@guavajobs/core"
-
-import { jsonSuccess } from "@/lib/api/response"
-import { withErrorHandler } from "@/lib/api/with-error-handler"
+import { prisma } from "@/db";
+import { API_VERSION } from "@/lib/api/version";
+import { jsonSuccess } from "@/lib/api/response";
+import { withErrorHandler } from "@/lib/api/with-error-handler";
 
 export const GET = withErrorHandler(async () => {
-  const payload: {
-    status: string
-    version: string
-    db?: string
-  } = {
-    status: "ok",
-    version: API_VERSION,
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return jsonSuccess({
+      ok: true,
+      status: "ok",
+      version: API_VERSION,
+      database: "postgres",
+    });
+  } catch {
+    return jsonSuccess({
+      ok: false,
+      status: "degraded",
+      version: API_VERSION,
+      database: "error",
+    });
   }
-
-  if (isDatabaseConfigured()) {
-    try {
-      await getDb().$queryRaw`SELECT 1`
-      payload.db = "connected"
-    } catch {
-      payload.db = "error"
-    }
-  }
-
-  return jsonSuccess(payload)
-})
+});

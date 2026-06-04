@@ -14,7 +14,7 @@ export async function parseApiResponse<T = Record<string, unknown>>(
   if (body.startsWith("<!DOCTYPE") || body.startsWith("<html")) {
     throw new Error(
       res.status === 500
-        ? "Server error while uploading. Restart the dev server. If it persists, run: npm rebuild better-sqlite3"
+        ? "Server error while uploading. Restart the dev server and check DATABASE_URL in .env.local."
         : `Unexpected server response (${res.status}). ${snippet}`,
     );
   }

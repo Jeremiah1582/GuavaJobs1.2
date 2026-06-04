@@ -12,7 +12,7 @@ type ExtractOptions = {
   maxPages?: number;
 };
 
-type TextItem = {
+type PdfTextItem = {
   str: string;
   transform: number[];
 };
@@ -42,7 +42,7 @@ export async function extractTextFromPdfBuffer(
 }
 
 /** Sort text items in reading order (top→bottom, left→right). */
-function pageItemsToText(items: TextItem[]): string {
+function pageItemsToText(items: PdfTextItem[]): string {
   const sorted = [...items].sort((a, b) => {
     const yA = a.transform[5] ?? 0;
     const yB = b.transform[5] ?? 0;
@@ -80,7 +80,6 @@ async function extractWithPdfJs(
 
   const doc = await getDocument({
     data: new Uint8Array(buffer),
-    disableWorker: true,
     useSystemFonts: true,
   }).promise;
 
@@ -91,13 +90,18 @@ async function extractWithPdfJs(
   for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
     const page = await doc.getPage(pageNum);
     const content = await page.getTextContent();
-    const items = content.items.filter(
-      (item): item is TextItem =>
+    const items: PdfTextItem[] = content.items.flatMap((item) => {
+      if (
         typeof item === "object" &&
         item !== null &&
         "str" in item &&
-        typeof (item as TextItem).str === "string",
-    );
+        typeof item.str === "string" &&
+        Array.isArray(item.transform)
+      ) {
+        return [{ str: item.str, transform: item.transform as number[] }];
+      }
+      return [];
+    });
 
     const pageText = pageItemsToText(items);
     if (pageText.trim()) {

@@ -58,7 +58,7 @@ Rules: ${TONES[tone] ?? TONES.professional} Open "Dear Hiring Manager,". 3 parag
     const content = await complete(prompt, undefined, 0.5, MODEL_SMART, 600);
 
     const id = randomUUID();
-    await prisma.coverLetter.create({
+    await prisma.legacyCoverLetter.create({
       data: {
         id,
         userId: user.id,
@@ -107,7 +107,7 @@ export async function GET() {
         matchScore: j.matchScore,
       }));
 
-    const letters = await prisma.coverLetter.findMany({
+    const letters = await prisma.legacyCoverLetter.findMany({
       where: { userId: user.id },
       orderBy: { generatedAt: "desc" },
     });

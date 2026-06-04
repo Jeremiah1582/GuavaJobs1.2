@@ -94,13 +94,15 @@ How you respond:
       { role: "user" as const, content: message.trim() },
     ];
 
-    const stream = await llm.chat.completions.create({
+    const stream = (await llm.chat.completions.create({
       model: MODEL_SMART,
       messages: llmMessages,
       temperature: 0.7,
       max_tokens: 500,
       stream: true,
-    });
+    })) as AsyncIterable<{
+      choices: Array<{ delta?: { content?: string } }>;
+    }>;
 
     let fullContent = "";
     const encoder = new TextEncoder();

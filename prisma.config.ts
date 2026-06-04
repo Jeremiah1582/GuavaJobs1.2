@@ -10,6 +10,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("INTERNHUNT_DATABASE_URL"),
+    // CLI (migrate, db execute): session on 5432. App runtime uses DATABASE_URL in src/db (0B).
+    url: env("DIRECT_URL"),
   },
 });

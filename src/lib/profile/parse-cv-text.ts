@@ -1,4 +1,4 @@
-import type { EducationEntry, ExperienceEntry } from "@guavajobs/core"
+import type { EducationEntry, ExperienceEntry } from "@/lib/validators/profile"
 
 /**
  * Simple heuristic: split on blank lines; lines with " at " or " | " become roles.

@@ -1,35 +1,24 @@
 "use server"
 
 import { redirect } from "next/navigation"
-import {
-  applicationsService,
-  jobsService,
-  JobsServiceError,
-  usersService,
-} from "@guavajobs/core"
+import { applicationsService } from "@/lib/applications/server"
+import { jobsService } from "@/lib/jobs"
+import { usersService } from "@/lib/users"
 
 import { getSession } from "@/lib/auth/get-session"
 
 export async function trackJobById(jobId: string): Promise<void> {
   const session = await getSession()
   if (!session) {
-    redirect(`/sign-in?next=${encodeURIComponent(`/jobs/${jobId}?track=1`)}`)
+    redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/jobs?track=${jobId}`)}`)
   }
 
   await usersService.ensureUser(session)
 
-  let job
-  try {
-    job = await jobsService.resolveListing(jobId)
-  } catch (err) {
-    if (err instanceof JobsServiceError && err.status === 503) {
-      throw err
-    }
-    throw err
-  }
+  const job = await jobsService.resolveListing(session.id, jobId)
 
   if (!job) {
-    redirect("/jobs")
+    redirect("/dashboard/jobs")
   }
 
   await applicationsService.createFromJobListing(session.id, job)
@@ -38,7 +27,7 @@ export async function trackJobById(jobId: string): Promise<void> {
 export async function trackJobAction(formData: FormData): Promise<void> {
   const jobId = formData.get("jobId")
   if (typeof jobId !== "string" || !jobId) {
-    redirect("/jobs")
+    redirect("/dashboard/jobs")
   }
 
   await trackJobById(jobId)

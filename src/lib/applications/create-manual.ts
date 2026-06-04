@@ -1,7 +1,8 @@
 "use server"
 
 import { redirect } from "next/navigation"
-import { applicationsService, usersService } from "@guavajobs/core"
+import { applicationsService } from "@/lib/applications/server"
+import { usersService } from "@/lib/users"
 
 import { getSession } from "@/lib/auth/get-session"
 
@@ -10,7 +11,7 @@ export async function createManualApplicationAction(
 ): Promise<void> {
   const session = await getSession()
   if (!session) {
-    redirect("/sign-in?next=/applications/new")
+    redirect("/sign-in?next=/dashboard/applications/new")
   }
 
   await usersService.ensureUser(session)

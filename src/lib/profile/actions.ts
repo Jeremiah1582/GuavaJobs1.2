@@ -1,10 +1,8 @@
 "use server"
 
-import {
-  profileService,
-  profileUpdateSchema,
-  usersService,
-} from "@guavajobs/core"
+import { profileService } from "@/lib/profile"
+import { profileUpdateSchema } from "@/lib/validators/profile"
+import { usersService } from "@/lib/users"
 import { revalidatePath } from "next/cache"
 
 import { getSession } from "@/lib/auth/get-session"
@@ -145,7 +143,7 @@ export async function updateProfileAction(
 
     const parsed = profileUpdateSchema.parse(input)
     await profileService.update(session.id, parsed)
-    revalidatePath("/profile")
+    revalidatePath("/dashboard/profile")
     return { success: true }
   } catch (error) {
     const message =
@@ -210,7 +208,7 @@ export async function uploadCvAction(
 
     await usersService.ensureUser(session)
     await profileService.update(session.id, { cvFileUrl: path })
-    revalidatePath("/profile")
+    revalidatePath("/dashboard/profile")
     return { success: true }
   } catch (error) {
     const message =

@@ -1,0 +1,63 @@
+/* InternHunt dashboard utilities — kept alongside Guava tokens in globals.css */
+
+.font-display {
+  font-family: "Playfair Display", "DM Serif Display", serif;
+}
+.font-body {
+  font-family: "DM Sans", sans-serif;
+}
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.hover-reveal .reveal-content {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.hover-reveal:hover .reveal-content,
+.hover-reveal:focus-within .reveal-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.kinetic-text {
+  transition: font-weight 0.3s ease, letter-spacing 0.3s ease;
+}
+.kinetic-text:hover {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.text-fluid-hero {
+  font-size: clamp(2.5rem, 6vw + 1rem, 5.5rem);
+  line-height: 1.05;
+}
+.text-fluid-section {
+  font-size: clamp(2rem, 4vw + 0.5rem, 3.5rem);
+  line-height: 1.15;
+}
+.text-fluid-body {
+  font-size: clamp(1rem, 1.2vw + 0.25rem, 1.25rem);
+  line-height: 1.7;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    color-mix(in oklch, var(--muted-foreground) 10%, transparent) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-bg 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer-bg {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

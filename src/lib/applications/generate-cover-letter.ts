@@ -5,10 +5,9 @@ import {
   applicationsService,
   CoverLettersServiceError,
   coverLettersService,
-  jobsService,
-  usersService,
-  type JobListing,
-} from "@guavajobs/core"
+} from "@/lib/applications/server"
+import { jobsService, type JobListing } from "@/lib/jobs"
+import { usersService } from "@/lib/users"
 
 import { getSession } from "@/lib/auth/get-session"
 import {
@@ -42,12 +41,16 @@ export async function generateCoverLetterFromJobAction(
 ): Promise<GenerateCoverLetterActionResult> {
   const session = await getSession()
   if (!session) {
-    redirect(`/sign-in?next=${encodeURIComponent(`/jobs?job=${jobId}`)}`)
+    redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/jobs?job=${jobId}`)}`)
   }
 
   await usersService.ensureUser(session)
 
-  const job = await jobsService.resolveListing(jobId, options?.jobSnapshot)
+  const job = await jobsService.resolveListing(
+    session.id,
+    jobId,
+    options?.jobSnapshot,
+  )
   if (!job) {
     return {
       ok: false,
@@ -77,7 +80,7 @@ export async function regenerateCoverLetterAction(
 ): Promise<GenerateCoverLetterActionResult> {
   const session = await getSession()
   if (!session) {
-    redirect(`/sign-in?next=${encodeURIComponent(`/applications/${applicationId}`)}`)
+    redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/applications/${applicationId}`)}`)
   }
 
   await usersService.ensureUser(session)

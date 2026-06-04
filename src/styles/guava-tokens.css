@@ -1,0 +1,90 @@
+/**
+ * GuavaJobs brand tokens — shared by landingpage/ and app/
+ * Pink = guava flesh (primary). Green = skin/leaves (secondary).
+ * Gradients are single-hue only — never pink-to-green on one surface.
+ */
+
+:root {
+  /* Guava pink — flesh (primary brand, hue ~8–15) */
+  --guava-pink: oklch(0.63 0.16 12);
+  --guava-pink-light: oklch(0.95 0.03 12);
+  --guava-pink-dark: oklch(0.51 0.14 12);
+  --guava-pink-gradient-from: oklch(0.68 0.14 15);
+  --guava-pink-gradient-to: oklch(0.56 0.17 8);
+
+  /* Guava green — skin/leaves (secondary accent, hue ~152) */
+  --guava-green: oklch(0.58 0.15 152);
+  --guava-green-light: oklch(0.93 0.04 152);
+  --guava-green-dark: oklch(0.46 0.13 152);
+  --guava-green-gradient-from: oklch(0.62 0.13 150);
+  --guava-green-gradient-to: oklch(0.50 0.14 155);
+
+  /* Backward-compatible aliases (green) */
+  --guava: var(--guava-green);
+  --guava-light: var(--guava-green-light);
+  --guava-dark: var(--guava-green-dark);
+}
+
+.dark {
+  --guava-pink: oklch(0.68 0.14 12);
+  --guava-pink-light: oklch(0.28 0.05 12);
+  --guava-pink-dark: oklch(0.58 0.13 12);
+  --guava-pink-gradient-from: oklch(0.72 0.13 15);
+  --guava-pink-gradient-to: oklch(0.60 0.15 8);
+
+  --guava-green: oklch(0.62 0.14 152);
+  --guava-green-light: oklch(0.28 0.06 152);
+  --guava-green-dark: oklch(0.52 0.12 152);
+  --guava-green-gradient-from: oklch(0.66 0.12 150);
+  --guava-green-gradient-to: oklch(0.54 0.13 155);
+
+  --guava: var(--guava-green);
+  --guava-light: var(--guava-green-light);
+  --guava-dark: var(--guava-green-dark);
+}
+
+@theme inline {
+  --color-guava-pink: var(--guava-pink);
+  --color-guava-pink-light: var(--guava-pink-light);
+  --color-guava-pink-dark: var(--guava-pink-dark);
+  --color-guava-green: var(--guava-green);
+  --color-guava-green-light: var(--guava-green-light);
+  --color-guava-green-dark: var(--guava-green-dark);
+  --color-guava: var(--guava);
+  --color-guava-light: var(--guava-light);
+  --color-guava-dark: var(--guava-dark);
+}
+
+@layer utilities {
+  .bg-guava-pink-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--guava-pink-gradient-from) 0%,
+      var(--guava-pink-gradient-to) 100%
+    );
+  }
+
+  .bg-guava-green-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--guava-green-gradient-from) 0%,
+      var(--guava-green-gradient-to) 100%
+    );
+  }
+
+  .bg-section-pink {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--guava-pink-light) 70%, transparent) 0%,
+      var(--background) 100%
+    );
+  }
+
+  .bg-section-green {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--guava-green-light) 70%, transparent) 0%,
+      var(--background) 100%
+    );
+  }
+}
