@@ -6,8 +6,10 @@ import { usersService } from "@/lib/users"
 import { revalidatePath } from "next/cache"
 
 import { getSession } from "@/lib/auth/get-session"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseAdmin } from "@/lib/supabase/admin"
 import { isSupabaseBrowserConfigured } from "@/lib/supabase/env"
+
+import { syncFromResume, type SyncMode } from "./sync-from-resume"
 
 export type ProfileActionState = {
   error?: string
@@ -152,6 +154,61 @@ export async function updateProfileAction(
   }
 }
 
+export type ProfileCompletenessResult = {
+  percent: number
+  missing: string[]
+}
+
+export async function getProfileCompletenessAction(): Promise<
+  ProfileCompletenessResult | { error: string }
+> {
+  const session = await getSession()
+  if (!session) {
+    return { error: "Not authenticated" }
+  }
+
+  await usersService.ensureUser(session)
+  await profileService.getOrCreateForUser(session.id)
+  const profile = await profileService.getByUserId(session.id)
+  if (!profile) {
+    return { percent: 0, missing: [] }
+  }
+
+  return profile.completeness
+}
+
+export type ApplyResumeToProfileResult = {
+  success?: boolean
+  updated?: boolean
+  error?: string
+}
+
+export async function applyResumeToProfileAction(
+  resumeId: string,
+  mode: SyncMode,
+): Promise<ApplyResumeToProfileResult> {
+  const session = await getSession()
+  if (!session) {
+    return { error: "Not authenticated" }
+  }
+
+  if (!resumeId?.trim()) {
+    return { error: "Resume id is required." }
+  }
+
+  await usersService.ensureUser(session)
+
+  try {
+    const updated = await syncFromResume(session.id, resumeId.trim(), mode)
+    revalidatePath("/dashboard/profile")
+    return { success: true, updated }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update profile"
+    return { error: message }
+  }
+}
+
 export async function uploadCvAction(
   _prevState: ProfileActionState,
   formData: FormData,
@@ -185,7 +242,7 @@ export async function uploadCvAction(
   }
 
   try {
-    const supabase = await createServerSupabaseClient()
+    const supabase = createSupabaseAdmin()
     const ext = file.name.split(".").pop() ?? "bin"
     const path = `${session.id}/${Date.now()}.${ext}`
 

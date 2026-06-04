@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation"
 
+import { ProfileCompletenessBar } from "@/components/profile/profile-completeness"
+import { ProfileForm } from "@/components/profile/profile-form"
 import { getSession } from "@/lib/auth/get-session"
+import { profileService } from "@/lib/profile"
+import { usersService } from "@/lib/users"
 
 export const dynamic = "force-dynamic"
 
@@ -15,8 +19,14 @@ export default async function DashboardProfilePage() {
     redirect("/sign-in?next=/dashboard/profile")
   }
 
-  // Profile service loads after core absorption (Phase 0).
-  // Placeholder until profileService is wired to Postgres.
+  await usersService.ensureUser(session)
+  await profileService.getOrCreateForUser(session.id)
+  const profile = await profileService.getByUserId(session.id)
+
+  if (!profile) {
+    redirect("/sign-in?next=/dashboard/profile")
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-12">
       <header className="mb-8">
@@ -28,11 +38,12 @@ export default async function DashboardProfilePage() {
           with minimum effort. Your CV scanner can pre-fill this page.
         </p>
       </header>
-      <p className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-sm text-muted-foreground">
-        Profile data loading is enabled in Phase 0 (core absorption + Postgres).
-        Components are ready under{" "}
-        <code className="text-foreground">src/components/profile/</code>.
-      </p>
+
+      <div className="mb-8">
+        <ProfileCompletenessBar completeness={profile.completeness} />
+      </div>
+
+      <ProfileForm initialProfile={profile} />
     </div>
   )
 }

@@ -1,6 +1,9 @@
 // src/app/api/cover/generate/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { complete, MODEL_SMART } from "@/lib/llm";
 import { randomUUID } from "crypto";
@@ -19,13 +22,15 @@ const TONES: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
     const { jobId, tone = "professional" } = await req.json();
 
     if (!jobId)
       return NextResponse.json({ error: "jobId is required." }, { status: 400 });
 
-    const job = await resolveJobForUser(user.id, jobId);
+    const job = await resolveJobForUser(userId, jobId);
     if (!job)
       return NextResponse.json(
         { error: "Job not found. Scan or save the job first." },
@@ -33,7 +38,7 @@ export async function POST(req: NextRequest) {
       );
 
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId, isActive: 1 },
     });
     if (!resume)
       return NextResponse.json(
@@ -61,7 +66,7 @@ Rules: ${TONES[tone] ?? TONES.professional} Open "Dear Hiring Manager,". 3 parag
     await prisma.legacyCoverLetter.create({
       data: {
         id,
-        userId: user.id,
+        userId,
         jobId,
         resumeId: resume.id,
         content,
@@ -86,14 +91,16 @@ Rules: ${TONES[tone] ?? TONES.professional} Open "Dear Hiring Manager,". 3 parag
 
 export async function GET() {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
 
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId, isActive: 1 },
     });
 
     const { cached, matches, saved, applied } = await listJobsForUser(
-      user.id,
+      userId,
       resume?.id ?? null,
     );
     const savedJobs = buildJobListItems(cached, matches, saved, applied)
@@ -108,13 +115,13 @@ export async function GET() {
       }));
 
     const letters = await prisma.legacyCoverLetter.findMany({
-      where: { userId: user.id },
+      where: { userId },
       orderBy: { generatedAt: "desc" },
     });
 
     const enriched = await Promise.all(
       letters.map(async (l) => {
-        const job = await resolveJobForUser(user.id, l.jobId);
+        const job = await resolveJobForUser(userId, l.jobId);
         return {
           id: l.id,
           jobId: l.jobId,
@@ -122,7 +129,7 @@ export async function GET() {
           company: job?.company ?? "Unknown company",
           tone: l.tone,
           content: l.content,
-          generatedAt: l.generatedAt,
+          generatedAt: Number(l.generatedAt),
         };
       }),
     );

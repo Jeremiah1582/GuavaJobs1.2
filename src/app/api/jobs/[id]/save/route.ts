@@ -1,6 +1,9 @@
 // src/app/api/jobs/[id]/save/route.ts — persist job id + source (+ snapshot)
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { randomUUID } from "crypto";
 import {
@@ -27,7 +30,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
     const { id: rawId } = await params;
     const jobExternalId = decodeJobId(rawId);
 
@@ -43,7 +48,7 @@ export async function POST(
     }
 
     const existing = await prisma.savedJob.findFirst({
-      where: { userId: user.id, jobExternalId },
+      where: { userId, jobExternalId },
     });
 
     if (existing) {
@@ -51,7 +56,7 @@ export async function POST(
       return NextResponse.json({ saved: false, jobId: jobExternalId });
     }
 
-    const cached = await getCachedJobForUser(user.id, jobExternalId);
+    const cached = await getCachedJobForUser(userId, jobExternalId);
     const snapshot =
       cached != null
         ? cacheRowToSnapshot(cached)
@@ -72,7 +77,7 @@ export async function POST(
     await prisma.savedJob.create({
       data: {
         id: randomUUID(),
-        userId: user.id,
+        userId,
         jobExternalId,
         source: cached?.source ?? body.source ?? snapshot.source ?? "Unknown",
         snapshot: JSON.stringify(snapshot),

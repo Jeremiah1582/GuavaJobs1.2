@@ -2,6 +2,7 @@
 
 import { prisma } from "@/db";
 import type { AppliedJob, Job, JobMatch, SavedJob } from "@/generated/prisma";
+import { epochMsNow, epochMsToDate } from "@/lib/epoch-ms";
 import type { ScrapedJob } from "@/lib/scraper";
 
 export const STALE_SCRAPE_MS = 15 * 60 * 1000;
@@ -48,7 +49,7 @@ export async function clearStaleScrapeRuns(): Promise<number> {
       where: { id: run.id },
       data: {
         status: "error",
-        finishedAt: Date.now(),
+        finishedAt: epochMsNow(),
         error: "Scrape timed out or was interrupted. Try scanning again.",
       },
     });
@@ -83,9 +84,11 @@ export async function replaceUserJobCache(
 
   if (scraped.length === 0) return 0;
 
-  const scrapedAt = Date.now();
+  const scrapedAt = epochMsNow();
   for (const job of scraped) {
-    const postedAt = job.postedAt ? new Date(job.postedAt).getTime() : null;
+    const postedAt = job.postedAt
+      ? BigInt(new Date(job.postedAt).getTime())
+      : null;
     const data = {
       userId,
       title: job.title,
@@ -136,7 +139,10 @@ export function cacheRowToSnapshot(row: Job): JobSnapshot {
     url: row.url,
     source: row.source,
     requiredSkills: safeJsonArray(row.requiredSkills),
-    postedAt: row.postedAt != null ? new Date(row.postedAt).toISOString() : null,
+    postedAt:
+      row.postedAt != null
+        ? (epochMsToDate(row.postedAt)?.toISOString() ?? null)
+        : null,
   };
 }
 
@@ -183,16 +189,18 @@ export function relativeTime(date: Date): string {
 }
 
 export function postedLabel(
-  postedAt: Date | string | number | null | undefined,
+  postedAt: Date | string | number | bigint | null | undefined,
 ): string {
   if (postedAt == null) return "Recently";
   const d =
     postedAt instanceof Date
       ? postedAt
-      : typeof postedAt === "number"
-        ? new Date(postedAt)
-        : new Date(postedAt);
-  if (Number.isNaN(d.getTime())) return String(postedAt);
+      : typeof postedAt === "bigint"
+        ? epochMsToDate(postedAt)
+        : typeof postedAt === "number"
+          ? new Date(postedAt)
+          : new Date(postedAt);
+  if (!d || Number.isNaN(d.getTime())) return String(postedAt);
   return relativeTime(d);
 }
 

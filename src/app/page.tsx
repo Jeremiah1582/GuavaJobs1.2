@@ -142,10 +142,10 @@ function CTAAndFooter() {
               Ready to Find Your<br />Perfect Internship?
             </h2>
             <p className="text-lg text-muted-foreground mb-10">
-              Join InternHunt today. Open the dashboard and start hunting — no sign-in required.
+              Join InternHunt today. Create a free account and track every application in one place.
             </p>
             <MagneticWrapper>
-              <Link href="/dashboard">
+              <Link href="/sign-up">
                 <motion.span whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.97 }}
                   className="btn-ink text-lg px-10 py-5 inline-flex items-center gap-3 mx-auto">
                   Get Started Free <ArrowRight className="w-5 h-5" />

@@ -1,6 +1,9 @@
 // src/app/api/resume/route.ts
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import type { Resume } from "@/generated/prisma";
 
@@ -70,9 +73,10 @@ function parseResume(r: Resume) {
 
 export async function GET() {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId: session.id, isActive: 1 },
       orderBy: { uploadedAt: "desc" },
     });
     return NextResponse.json({ resume: resume ? parseResume(resume) : null });

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { isSupabaseConfigured } from "./env";
+import { isSupabaseAdminConfigured } from "./env";
 
 /** Server-side Supabase admin client (service role). Never use in the browser. */
 export function createSupabaseAdmin(): SupabaseClient {
@@ -21,4 +21,4 @@ export function createSupabaseAdmin(): SupabaseClient {
   });
 }
 
-export { isSupabaseConfigured };
+export { isSupabaseAdminConfigured };

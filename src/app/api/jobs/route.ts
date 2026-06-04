@@ -1,6 +1,9 @@
 // src/app/api/jobs/route.ts — real listings from per-user SerpAPI cache
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import {
   buildJobListItems,
@@ -10,18 +13,20 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
-    const user = await requireAuth();
+    const userId = session.id;
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search")?.toLowerCase() ?? "";
     const filter = searchParams.get("filter") ?? "all";
 
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId, isActive: 1 },
     });
 
     const { cached, matches, saved, applied } = await listJobsForUser(
-      user.id,
+      userId,
       resume?.id ?? null,
     );
 

@@ -1,4 +1,4 @@
-created_date: 2026-06-03 14:45:00, updated_at: 2026-06-04 10:00:00
+created_date: 2026-06-03 14:45:00, updated_at: 2026-06-04 16:00:00
 
 # InternHunt — Project structure
 
@@ -8,9 +8,10 @@ Canonical paths for agents. **Execute tasks from** [`MASTER_BUILD_PLAN.md`](./MA
 
 | URL | File | Notes |
 |-----|------|-------|
-| `/sign-in` | `src/app/sign-in/page.tsx` | **Create in Phase 1** |
-| `/sign-up` | `src/app/sign-up/page.tsx` | Optional |
-| `/auth/callback` | `src/app/auth/callback/route.ts` | If OAuth / email links |
+| `/sign-in` | `src/app/sign-in/page.tsx` | Email + password (Wave 1) |
+| `/sign-up` | `src/app/sign-up/page.tsx` | Registration |
+| `/auth/callback` | `src/app/auth/callback/route.ts` | Email confirm / PKCE |
+| `/login` | `src/app/login/page.tsx` | Redirects to `/sign-in` |
 | `/` | `src/app/page.tsx` | Marketing / home |
 
 **Rule:** No `DEV_MODE` / dev user. Middleware guards `/dashboard/*`.
@@ -50,8 +51,8 @@ Redirects: `next.config.ts` (`/applications`, `/profile`, `/jobs` → dashboard)
 | Applications | `src/lib/applications/` — `service.ts` (target), `actions.ts`, `track-job.ts`, `generate-cover-letter.ts`, `row-styles.ts` |
 | Profile | `src/lib/profile/` |
 | Jobs | `src/lib/jobs-api.ts` (keep), `src/lib/jobs/saved-searches.ts` (target) |
-| Auth | `src/lib/auth/get-session.ts` (target) |
-| Supabase | `src/lib/supabase/client.ts`, `server.ts`, `middleware.ts` (target) |
+| Auth | `src/lib/auth/get-session.ts`, `require-session.ts`, `actions.ts` |
+| Supabase | `src/lib/supabase/client.ts`, `server.ts`, `middleware.ts`, `admin.ts` |
 | Users | `src/lib/users/ensure-user.ts` (target) |
 | AI | `src/lib/llm.ts`, `src/lib/ai/` (target) |
 | Validators | `src/lib/validators/` (target) |

@@ -5,10 +5,11 @@ import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, FileText, Target, PenTool, MessageSquare,
-  LogOut, ChevronRight, TrendingUp, Clock, Sparkles,
+  LogOut, Home, ChevronRight, TrendingUp, Clock, Sparkles,
   Upload, ArrowRight, BarChart3, Zap, CheckCircle, AlertCircle,
 } from "lucide-react";
-import { DEV_USER } from "@/lib/dev-user";
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ function Sidebar({
           onClick={onHome}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary-foreground/50 hover:bg-primary-foreground/10 hover:text-primary-foreground transition-colors"
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
+          <Home className="w-5 h-5 flex-shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -217,6 +218,17 @@ function Sidebar({
             )}
           </AnimatePresence>
         </button>
+
+        <SignOutButton className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary-foreground/50 hover:bg-primary-foreground/10 hover:text-primary-foreground transition-colors">
+          <LogOut className="w-5 h-5 flex-shrink-0" />
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span className="text-sm font-medium whitespace-nowrap">
+                Sign out
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </SignOutButton>
 
         {/* User chip */}
         <div className={`flex items-center gap-2.5 px-3 py-2.5 mt-1 rounded-xl bg-primary-foreground/5 ${collapsed ? "justify-center" : ""}`}>
@@ -250,7 +262,28 @@ export default function Dashboard() {
     avgMatchScore: null, hasResume: false, activity: [],
   });
 
-  const user = DEV_USER;
+  const [user, setUser] = useState<{ name: string; email: string }>({
+    name: "",
+    email: "",
+  });
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+    void supabase.auth.getUser().then(({ data }) => {
+      const authUser = data.user;
+      if (!authUser?.email) return;
+      const metaName =
+        typeof authUser.user_metadata?.full_name === "string"
+          ? authUser.user_metadata.full_name
+          : typeof authUser.user_metadata?.name === "string"
+            ? authUser.user_metadata.name
+            : "";
+      setUser({
+        email: authUser.email,
+        name: metaName || authUser.email,
+      });
+    });
+  }, []);
 
   // Rotate tips
   useEffect(() => {

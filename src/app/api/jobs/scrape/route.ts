@@ -1,6 +1,9 @@
 // src/app/api/jobs/scrape/route.ts
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { randomUUID } from "crypto";
 import { computeMatchScore, resetGroqCallCounter } from "@/lib/job-matcher";
@@ -10,6 +13,7 @@ import {
   pruneOrphanMatches,
   replaceUserJobCache,
 } from "@/lib/jobs-api";
+import { epochMsNow, epochMsToIso } from "@/lib/epoch-ms";
 import { getSerpApiKey } from "@/lib/serpapi-jobs";
 
 async function getScraper() {
@@ -19,14 +23,21 @@ async function getScraper() {
 
 export async function GET() {
   try {
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
-    const user = await requireAuth();
     const latest = await prisma.scrapeRun.findFirst({
       orderBy: { startedAt: "desc" },
     });
-    const jobCount = await countUserCachedJobs(user.id);
+    const jobCount = await countUserCachedJobs(session.id);
     return NextResponse.json({
-      run: latest ?? null,
+      run: latest
+        ? {
+            ...latest,
+            startedAt: epochMsToIso(latest.startedAt),
+            finishedAt: epochMsToIso(latest.finishedAt),
+          }
+        : null,
       jobCount,
     });
   } catch {
@@ -36,7 +47,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
 
     const running = await prisma.scrapeRun.findFirst({
@@ -60,7 +72,7 @@ export async function POST() {
     }
 
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId: session.id, isActive: 1 },
     });
     if (!resume) {
       return NextResponse.json(
@@ -71,7 +83,7 @@ export async function POST() {
 
     const runId = randomUUID();
     await prisma.scrapeRun.create({ data: { id: runId, status: "running" } });
-    runScraper(runId, user.id, resume).catch(console.error);
+    runScraper(runId, session.id, resume).catch(console.error);
 
     return NextResponse.json({ message: "Scrape started.", runId });
   } catch (err: unknown) {
@@ -185,7 +197,7 @@ async function runScraper(
         where: { id: runId },
         data: {
           status: "done",
-          finishedAt: Date.now(),
+          finishedAt: epochMsNow(),
           jobsFound: 0,
           error:
             "No jobs returned from Google Jobs (SerpAPI). Check SERPAPI_API_KEY, quota, and try SERPAPI_LOCATION in .env.local (e.g. United Kingdom).",
@@ -252,14 +264,14 @@ async function runScraper(
 
     await prisma.scrapeRun.update({
       where: { id: runId },
-      data: { status: "done", finishedAt: Date.now(), jobsFound: cached },
+      data: { status: "done", finishedAt: epochMsNow(), jobsFound: cached },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[scrape] Fatal:", err);
     await prisma.scrapeRun.update({
       where: { id: runId },
-      data: { status: "error", finishedAt: Date.now(), error: message },
+      data: { status: "error", finishedAt: epochMsNow(), error: message },
     });
   }
 }

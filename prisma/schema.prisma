@@ -294,7 +294,7 @@ model Resume {
   atsScore   Int?    @map("ats_score")
   summary    String?
   isActive   Int     @default(1) @map("is_active")
-  uploadedAt Int     @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("uploaded_at")
+  uploadedAt BigInt  @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("uploaded_at")
   metadata   String  @default("{}")
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -317,8 +317,8 @@ model Job {
   url            String
   source         String
   requiredSkills String  @default("[]") @map("required_skills")
-  postedAt       Int?    @map("posted_at")
-  scrapedAt      Int     @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("scraped_at")
+  postedAt       BigInt? @map("posted_at")
+  scrapedAt      BigInt  @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("scraped_at")
   isActive       Int     @default(1) @map("is_active")
 
   user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -338,7 +338,7 @@ model JobMatch {
   resumeId    String @map("resume_id")
   matchScore  Int    @map("match_score")
   matchReason String @default("") @map("match_reason")
-  computedAt  Int    @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("computed_at")
+  computedAt  BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("computed_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -355,7 +355,7 @@ model SavedJob {
   jobExternalId String @map("job_external_id")
   source        String
   snapshot      String @default("{}")
-  savedAt       Int    @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("saved_at")
+  savedAt       BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("saved_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -369,7 +369,7 @@ model AppliedJob {
   userId        String @map("user_id") @db.Uuid
   jobExternalId String @map("job_external_id")
   source        String
-  appliedAt     Int    @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("applied_at")
+  appliedAt     BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("applied_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -385,7 +385,7 @@ model LegacyCoverLetter {
   resumeId    String @map("resume_id")
   content     String
   tone        String @default("professional")
-  generatedAt Int    @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("generated_at")
+  generatedAt BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("generated_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -400,7 +400,7 @@ model ChatMessage {
   userId    String @map("user_id") @db.Uuid
   role      String
   content   String
-  createdAt Int    @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("created_at")
+  createdAt BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -410,8 +410,8 @@ model ChatMessage {
 
 model ScrapeRun {
   id         String  @id
-  startedAt  Int     @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("started_at")
-  finishedAt Int?    @map("finished_at")
+  startedAt  BigInt  @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("started_at")
+  finishedAt BigInt? @map("finished_at")
   jobsFound  Int?    @default(0) @map("jobs_found")
   status     String  @default("running")
   error      String?

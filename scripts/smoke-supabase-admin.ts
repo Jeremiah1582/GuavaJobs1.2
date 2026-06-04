@@ -3,10 +3,11 @@ import { config } from "dotenv";
 config({ path: ".env" });
 config({ path: ".env.local", override: true });
 
-import { createSupabaseAdmin, isSupabaseConfigured } from "../src/lib/supabase/admin";
+import { createSupabaseAdmin } from "../src/lib/supabase/admin";
+import { isSupabaseAdminConfigured } from "../src/lib/supabase/env";
 
 async function main() {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseAdminConfigured()) {
     console.error("Supabase env vars missing (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)");
     process.exit(1);
   }

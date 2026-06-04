@@ -1,89 +1,82 @@
 // src/app/api/chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { llm, MODEL_SMART } from "@/lib/llm";
 import { randomUUID } from "crypto";
+import { toEpochMsNumber } from "@/lib/epoch-ms";
 import { resumeTextForAI } from "@/lib/pdf-extract.server";
 
 export async function GET() {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
     const messages = await prisma.chatMessage.findMany({
-      where: { userId: user.id },
+      where: { userId: session.id },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
-    return NextResponse.json({ messages });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED")
-      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    return NextResponse.json({
+      messages: messages.map((m) => ({
+        ...m,
+        createdAt: toEpochMsNumber(m.createdAt),
+      })),
+    });
+  } catch {
     return NextResponse.json({ error: "Failed to load history." }, { status: 500 });
   }
 }
 
 export async function DELETE() {
   try {
-    const user = await requireAuth();
-    await prisma.chatMessage.deleteMany({ where: { userId: user.id } });
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    await prisma.chatMessage.deleteMany({ where: { userId: session.id } });
     return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED")
-      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  } catch {
     return NextResponse.json({ error: "Failed to clear chat." }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
     const { message } = await req.json();
 
     if (!message?.trim())
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
 
     const resume = await prisma.resume.findFirst({
-      where: { userId: user.id, isActive: 1 },
+      where: { userId, isActive: 1 },
     });
-
-    const resumeContext = resume
-      ? `The user has uploaded their resume (use all sections below, including later pages):
-- Skills: ${JSON.parse(resume.skills).join(", ")}
-- ATS Score: ${resume.atsScore}/100
-- Summary: ${resume.summary ?? "Not provided"}
-- Education: ${JSON.parse(resume.education).map((e: { degree: string; institution: string }) => `${e.degree} at ${e.institution}`).join("; ") || "Not specified"}
-- Experience: ${JSON.parse(resume.experience).map((e: { title: string; company: string; duration: string }) => `${e.title} at ${e.company} (${e.duration})`).join("; ") || "Not specified"}
-- Full resume text:
-${resumeTextForAI(resume.rawText)}`
-      : "The user has not uploaded a resume yet. Gently encourage them to upload one for personalized advice.";
-
-    const systemPrompt = `You are InternHunt AI — an expert career advisor for students and early-career professionals seeking internships.
-
-${resumeContext}
-
-How you respond:
-- Be practical, specific, and actionable
-- Reference the user's actual skills when relevant
-- Use **bold** for emphasis, numbered lists for steps
-- Keep responses 150-300 words — comprehensive but concise
-- Be encouraging but honest about skill gaps
-- If asked about companies, provide real, useful insights`;
 
     const history = await prisma.chatMessage.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 6,
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      take: 20,
     });
-    history.reverse();
 
     await prisma.chatMessage.create({
       data: {
         id: randomUUID(),
-        userId: user.id,
+        userId,
         role: "user",
         content: message.trim(),
       },
     });
+
+    const resumeContext = resume
+      ? `Resume summary: ${resume.summary ?? ""}\nSkills: ${resume.skills}\nText excerpt: ${resumeTextForAI(resume.rawText, 1500)}`
+      : "No resume uploaded yet.";
+
+    const systemPrompt = `You are InternHunt, a friendly career coach for students seeking internships.
+Be concise, practical, and encouraging. Use the candidate's resume when relevant.
+${resumeContext}`;
 
     const llmMessages = [
       { role: "system" as const, content: systemPrompt },
@@ -120,7 +113,7 @@ How you respond:
           await prisma.chatMessage.create({
             data: {
               id: randomUUID(),
-              userId: user.id,
+              userId,
               role: "assistant",
               content: fullContent,
             },
@@ -137,13 +130,10 @@ How you respond:
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED")
-      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
-    console.error("[chat]", err);
+  } catch {
     return NextResponse.json({ error: "Chat failed. Please try again." }, { status: 500 });
   }
 }

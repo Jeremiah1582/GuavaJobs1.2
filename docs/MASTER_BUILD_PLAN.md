@@ -1,4 +1,4 @@
-created_date: 2026-06-03 12:00:00, updated_at: 2026-06-04 10:00:00
+created_date: 2026-06-03 12:00:00, updated_at: 2026-06-04 22:30:00
 
 # InternHunt — Master Build Plan
 
@@ -15,6 +15,19 @@ created_date: 2026-06-03 12:00:00, updated_at: 2026-06-04 10:00:00
 3. Run **Verify** steps at the end of each wave before starting the next.  
 4. Mark tasks `[x]` in this file when done (optional but helps handoff).  
 5. If a task fails, fix before continuing — do not stack broken layers.
+
+### 1.1a Implementation notes (for AI / dev)
+
+When a wave includes a **How to implement** block, follow it before inventing new architecture. Prefer **wiring existing code** over rewriting. Standard patterns in this repo:
+
+| Pattern | Use when |
+|---------|----------|
+| **RSC page + client form** | Dashboard pages: server loads data with `getSession()` → `usersService.ensureUser()` → service → pass DTO to `"use client"` child |
+| **Server Actions** | Mutations from forms: `src/lib/*/actions.ts` with `getSession`, Zod/`profileUpdateSchema`, `revalidatePath` |
+| **Route Handlers** | External/legacy JSON APIs (`/api/jobs`, `/api/resume`) or streaming |
+| **No new packages** | Unless the plan explicitly says so |
+
+Full Wave 2 execution detail: [`.cursor/plans/wave_2_profile_cv_bridge.plan.md`](../.cursor/plans/wave_2_profile_cv_bridge.plan.md) (create/update when planning W2).
 
 ### 1.2 Critical path (what blocks what)
 
@@ -53,19 +66,22 @@ Wave 0D API helpers          ─┘         │
 | Area | Status | Evidence |
 |------|--------|----------|
 | UI (applications, profile, dashboard) | Ready | `src/components/applications/`, `profile/`, `dashboard/` |
-| Dashboard routes | Ready | `src/app/dashboard/applications/**`, `profile/page.tsx` (placeholder) |
+| Dashboard routes | Ready | `src/app/dashboard/applications/**`, `profile/page.tsx` (RSC + ProfileForm) |
 | Styling | Ready | `src/styles/guava-tokens.css`, `src/app/globals.css` |
-| Env (local) | Ready | `DATABASE_URL`, `DIRECT_URL`, Supabase URL + publishable + **service role** in `.env.local` |
-| Prisma schema | **SQLite + Better Auth** | `prisma/schema.prisma` `provider = "sqlite"` |
-| Prisma config | **Wrong URL** | `prisma.config.ts` uses `INTERNHUNT_DATABASE_URL` |
-| DB runtime | **SQLite** | `src/db/index.ts` → better-sqlite3 |
-| Business logic | **In `core/`** | 34 files import `@guavajobs/core` |
-| Auth | **Dev user only** | `src/lib/session.ts` → `ensureDevUser`; 10 legacy APIs use `requireAuth` |
-| Supabase libs | **Missing** | No `src/lib/supabase/` (profile actions import it — broken) |
-| `getSession` | **Missing** | Imported by application pages; not implemented |
-| Application hub runtime | **Broken** | Pages call core services without package wired |
+| Env (local) | Ready | `DATABASE_URL`, `DIRECT_URL`, Supabase URL + publishable + service role |
+| Prisma schema | **Postgres** | `prisma/schema.prisma` `provider = "postgresql"` |
+| Prisma config | Ready | `prisma.config.ts` → `DIRECT_URL` for CLI |
+| DB runtime | Ready | `src/db/index.ts` → Prisma + `@prisma/adapter-pg` |
+| Business logic | Ready | `src/lib/` (no `core/`, no `@guavajobs/core`) |
+| Auth | **Supabase (Wave 1 done)** | `@supabase/ssr`, `/sign-in`, middleware guards `/dashboard` |
+| Supabase libs | Ready | `src/lib/supabase/client.ts`, `server.ts`, `middleware.ts`, `admin.ts` |
+| `getSession` | Ready | `src/lib/auth/get-session.ts` → `auth.getUser()` |
+| Application hub | **Auth-gated** | Pages redirect to `/sign-in`; APIs return 401 when signed out |
+| Profile page | **Ready** | `dashboard/profile/page.tsx` — RSC, completeness bar, ProfileForm, CV upload |
+| Resume → profile | **Ready** | `sync-from-resume.ts`, `applyResumeToProfileAction`, resume page merge/overwrite dialog |
+| Storage | **Partial** | `cv-uploads` via `storage:ensure` + service-role upload; `resumes` bucket deferred |
 
-**Immediate blocker:** Wave 0 (Postgres + absorb `core/`) before any Application Hub QA.
+**Next:** **Wave 3** (application backend — Milestone B). Wave 2 complete.
 
 ### 1.4 Locked decisions (do not re-litigate)
 
@@ -101,7 +117,7 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 ---
 
-### Wave 0A — Postgres schema (foundation)
+### Wave 0A — Postgres schema (foundation) ✅ Complete
 
 **Goal:** Single `prisma/schema.prisma` for Supabase Postgres.  
 **Prereqs:** `DATABASE_URL`, `DIRECT_URL` in `.env.local`.
@@ -123,13 +139,13 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 **Verify W0A**
 
-- [ ] `npx prisma migrate status` clean on Supabase  
-- [ ] Tables visible in Supabase Table Editor  
-- [ ] `rg 'provider = "sqlite"' prisma/schema.prisma` → no matches  
+- [x] `npx prisma migrate status` clean on Supabase  
+- [x] Tables visible in Supabase Table Editor  
+- [x] `rg 'provider = "sqlite"' prisma/schema.prisma` → no matches  
 
 ---
 
-### Wave 0B — Prisma client runtime
+### Wave 0B — Prisma client runtime ✅ Complete
 
 **Goal:** App uses Postgres only at runtime.
 
@@ -144,12 +160,12 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 **Verify W0B**
 
-- [ ] `import { prisma } from "@/db"` works in a one-line script or API route  
-- [ ] `rg 'better-sqlite3|INTERNHUNT_DATABASE' src prisma.config.ts` → only comments or none  
+- [x] `import { prisma } from "@/db"` works in a one-line script or API route  
+- [x] `rg 'better-sqlite3|INTERNHUNT_DATABASE' src prisma.config.ts` → only comments or none  
 
 ---
 
-### Wave 0C — Port `core/` into `src/lib/` (no import rewiring yet)
+### Wave 0C — Port `core/` into `src/lib/` (no import rewiring yet) ✅ Complete
 
 **Goal:** All business logic exists under `src/lib/`; tests compile after 0E.
 
@@ -172,12 +188,12 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 **Verify W0C**
 
-- [ ] New files exist under `src/lib/`  
-- [ ] Ported files do not import `@guavajobs/core`  
+- [x] New files exist under `src/lib/`  
+- [x] Ported files do not import `@guavajobs/core`  
 
 ---
 
-### Wave 0D — Supabase admin helper (storage prep)
+### Wave 0D — Supabase admin helper (storage prep) ✅ Complete
 
 **Goal:** Server can talk to Storage with service role (for Wave 2).
 
@@ -189,11 +205,11 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 **Verify W0D**
 
-- [ ] Admin client constructs without throw when env set (smoke script OK)  
+- [x] Admin client constructs without throw when env set (smoke script OK)  
 
 ---
 
-### Wave 0E — Rewire imports + legacy features
+### Wave 0E — Rewire imports + legacy features ✅ Complete
 
 **Goal:** Zero `@guavajobs/core`; legacy InternHunt APIs use Postgres `prisma`.
 
@@ -203,22 +219,22 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 | W0E.2 | Replace in **7 lib files** (applications/*, profile/*) | §5.1 |
 | W0E.3 | Replace in **15 component files** (applications, profile, dashboard) | §5.1 |
 | W0E.4 | Update `src/lib/jobs-api.ts` for Postgres `User`/`Job` types (UUID, DateTime) | Keep SerpAPI logic |
-| W0E.5 | Update `src/lib/dev-user.server.ts` — **stop using** or delete in Wave 1 | |
+| W0E.5 | Update `src/lib/dev-user.server.ts` — **stop using** or delete in Wave 1 | Done in Wave 1 |
 | W0E.6 | Update `src/app/api/health/route.ts` | DB connectivity |
 | W0E.7 | Delete `core/` directory | After grep clean |
 | W0E.8 | `npm run build` | Fix type errors |
 
 **Verify W0E**
 
-- [ ] `rg '@guavajobs/core' src` → **0 matches**  
-- [ ] `test ! -d core` or `core/` deleted  
-- [ ] `npm run build` passes  
+- [x] `rg '@guavajobs/core' src` → **0 matches**  
+- [x] `test ! -d core` or `core/` deleted  
+- [x] `npm run build` passes  
 
-**Wave 0 complete when:** W0A–W0E verify all checked.
+**Wave 0 complete when:** W0A–W0E verify all checked. ✅
 
 ---
 
-### Wave 1 — Supabase Auth (mandatory)
+### Wave 1 — Supabase Auth (mandatory) ✅ Complete
 
 **Goal:** Real sign-in; no dev bypass.  
 **Prereqs:** Wave 0 complete.
@@ -242,31 +258,74 @@ Task IDs: `W0A.1` = Wave 0A, task 1.
 
 **Verify W1**
 
-- [ ] Signed out → `/dashboard` redirects to sign-in  
-- [ ] Signed in → dashboard loads  
-- [ ] `User` row created in Postgres on first login  
-- [ ] Legacy job/resume APIs return 401 when signed out  
+- [x] Signed out → `/dashboard` redirects to sign-in  
+- [x] Signed in → dashboard loads  
+- [x] `User` row created in Postgres on first login (`usersService.ensureUser`)  
+- [x] Legacy job/resume APIs return 401 when signed out  
+
+See also: [`docs/SUPABASE_AUTH_SETUP.md`](./SUPABASE_AUTH_SETUP.md), `npm run verify:supabase-auth-env`, `npm run smoke:auth-sign-in`.
 
 ---
 
-### Wave 2 — Profile + CV bridge
+### Wave 2 — Profile + CV bridge ✅ **Complete**
 
-**Prereqs:** Wave 1.
+**Prereqs:** Wave 1 ✅  
+**Detailed plan:** [wave_2_profile_cv_bridge.plan.md](../.cursor/plans/wave_2_profile_cv_bridge.plan.md)
 
-| ID | Task | Files |
-|----|------|-------|
-| W2.1 | Implement full `src/app/dashboard/profile/page.tsx` with `ProfileForm`, completeness, `UrlImport` | |
-| W2.2 | Fix `src/lib/profile/actions.ts` imports (`profileService`, supabase server) | |
-| W2.3 | Create Supabase buckets `cv-uploads` (+ policies or service-role server upload) | Dashboard |
-| W2.4 | CV upload path in profile actions uses Storage or documents fallback | |
-| W2.5 | `src/lib/profile/sync-from-resume.ts` — map resume parse → profile | |
-| W2.6 | Resume page/API: after scan, prompt Apply / Confirm overwrite if 100% | `dashboard/resume` |
+| ID | Task | Files | Status |
+|----|------|-------|--------|
+| W2.1 | Implement full `src/app/dashboard/profile/page.tsx` with `ProfileForm`, completeness, `UrlImport` | | ✅ RSC page wired |
+| W2.2 | Fix `src/lib/profile/actions.ts` imports (`profileService`, supabase server) | | ✅ Wired (admin upload + `getSession`) |
+| W2.3 | Create Supabase buckets `cv-uploads` (+ policies or service-role server upload) | Dashboard | ✅ `cv-uploads` via `storage:ensure`; `resumes` bucket deferred |
+| W2.4 | CV upload path in profile actions uses Storage or documents fallback | | ✅ `uploadCvAction` + profile UI; manual browser QA recommended |
+| W2.5 | `src/lib/profile/sync-from-resume.ts` — map resume parse → profile | | ✅ `syncFromResume` + `applyResumeToProfileAction` |
+| W2.6 | Resume page/API: after scan, prompt Apply / Confirm overwrite if 100% | `dashboard/resume` | ✅ Auto-merge &lt;100%; AlertDialog at 100% |
+
+#### How to implement — W2.1 (profile page)
+
+**Do not rebuild the form** — [`ProfileForm`](../../src/components/profile/profile-form.tsx) already composes `UrlImport`, `ProfileCompletenessBar`, sections, `updateProfileAction`, `uploadCvAction`.
+
+1. Replace placeholder in [`dashboard/profile/page.tsx`](../../src/app/dashboard/profile/page.tsx) with an **async RSC**:
+   - `getSession()` → redirect `/sign-in?next=/dashboard/profile`
+   - `await usersService.ensureUser(session)`
+   - `await profileService.getOrCreateForUser(session.id)` then `profileService.getByUserId(session.id)` (always returns DTO after create)
+2. Render layout: page header + `<ProfileCompletenessBar completeness={profile.completeness} />` + `<ProfileForm initialProfile={profile} />`
+3. Optional: `export const dynamic = "force-dynamic"` (same as applications page)
+4. **Verify:** edit a field → Save → reload → value persists in Supabase `profiles` table
+
+#### How to implement — W2.3 / W2.4 (storage)
+
+- **W2.3:** Run `npm run storage:ensure` (creates private `cv-uploads`). Defer `resumes` bucket until resume files move off disk (InternHunt still uses `RESUMES_DIR` / local path in upload route).
+- **W2.4:** [`uploadCvAction`](../../src/lib/profile/actions.ts) already uploads via **service role** to `{session.id}/{timestamp}.ext` and sets `Profile.cvFileUrl`. After W2.1, test from profile form file input; surface bucket errors (already human-readable).
+
+#### How to implement — W2.5 (sync resume → profile)
+
+1. Add [`src/lib/profile/sync-from-resume.ts`](../../src/lib/profile/sync-from-resume.ts) (server-only):
+   - Load active `Resume` for `userId` (or by `resumeId`)
+   - Parse JSON columns: `skills`, `experience`, `education`, `summary`
+   - Build `ProfileUpdateInput` (map structured experience to `ExperienceEntry[]` — align with upload route’s `structured.experience` shape)
+   - **`merge` mode:** only fill empty/null profile fields (default when completeness &lt; 100%)
+   - **`overwrite` mode:** replace summary, skills, experience, education when user confirms
+2. Add server action `applyResumeToProfileAction(resumeId, mode)` in [`actions.ts`](../../src/lib/profile/actions.ts): session check → `syncFromResume` → `profileService.update` → `revalidatePath("/dashboard/profile")`
+
+#### How to implement — W2.6 (resume scan → profile)
+
+Per [`NOTES.md`](../NOTES.md): pre-fill with minimum effort; **if profile is 100% complete**, ask before overwriting.
+
+1. In [`dashboard/resume/page.tsx`](../../src/app/dashboard/resume/page.tsx) after successful `/api/resume/upload` response:
+   - Call new server action or lightweight `GET` that returns `profileService.getByUserId` completeness **or** pass `completeness.percent` from a follow-up fetch
+2. **If `completeness.percent < 100`:** call `applyResumeToProfileAction(resumeId, "merge")` + toast “Profile updated from your scan” + link to `/dashboard/profile`
+3. **If `completeness.percent === 100`:** show `AlertDialog`: “Profile is complete. Replace with data from this scan?” → Confirm runs `overwrite`, Cancel skips
+4. Do **not** block ATS UI on profile sync failure; log and toast error only
 
 **Verify W2**
 
-- [ ] Edit profile saves to Postgres  
-- [ ] CV upload succeeds (or clear error if bucket missing)  
-- [ ] Scan → profile flow works with confirm at 100%  
+- [x] `npm run build` + `npx tsc --noEmit` pass  
+- [x] Profile page RSC + actions wired (`/dashboard/profile`)  
+- [x] `cv-uploads` bucket confirmed (`npm run storage:ensure`)  
+- [ ] Edit profile saves to Postgres (manual: sign in → save → reload)  
+- [ ] CV upload succeeds from profile form (manual)  
+- [ ] Scan → profile merge / overwrite dialog (manual on `/dashboard/resume`)  
 
 ---
 
@@ -431,7 +490,7 @@ model Application {
 | Resume PDF | Bucket `resumes` or local `RESUMES_DIR` until bucket ready |
 | URL import | HTTP fetch in API route only — no bucket |
 
-Create buckets + RLS in Supabase dashboard (Wave 2). `src/lib/profile/actions.ts` expects bucket name `cv-uploads`.
+`cv-uploads` created via `npm run storage:ensure` (service-role upload; path `{userId}/...`). `resumes` Supabase bucket deferred — resume PDFs still use local `RESUMES_DIR` in `/api/resume/upload`. `src/lib/profile/actions.ts` expects bucket name `cv-uploads`.
 
 ---
 
@@ -468,17 +527,19 @@ Create buckets + RLS in Supabase dashboard (Wave 2). `src/lib/profile/actions.ts
 
 ## 10. Global success criteria
 
-- [ ] Fresh Postgres schema deployed  
-- [ ] Supabase Auth on all dashboard + protected API routes  
+- [x] Fresh Postgres schema deployed  
+- [x] Supabase Auth on all dashboard + protected API routes  
 - [ ] Milestone B then C  
-- [ ] `rg '@guavajobs/core' src` empty; `core/` deleted  
+- [x] `rg '@guavajobs/core' src` empty; `core/` deleted  
 - [ ] Application-scoped cover letters only; `/dashboard/cover` removed  
 
 ---
 
 ## 11. Agent handoff (next session)
 
-**Start here:** Wave **0A.1** → **0A.12**, verify, then **0B**, **0C**, **0D**, **0E**.
+**Start here:** Wave **3** — application backend (Milestone B): **W3.1**–**W3.8**.
+
+**Completed:** Waves **0–2** (Postgres, Supabase Auth, profile + CV bridge).
 
 **Do not start:** Wave 4 UI until Wave 3 verify passes.
 
@@ -486,9 +547,11 @@ Create buckets + RLS in Supabase dashboard (Wave 2). `src/lib/profile/actions.ts
 
 ```bash
 rg '@guavajobs/core' src --files-with-matches | wc -l   # target: 0
-rg 'better-sqlite3|INTERNHUNT' src prisma.config.ts    # target: 0
+rg 'dev-user|ensureDevUser|DEV_MODE' src               # target: 0
+npm run verify:supabase-auth-env && npm run storage:ensure
+npm run build
 ```
 
 ---
 
-*Updated 2026-06-04: service role available; bite-sized waves 0A–7; codebase audit and `prisma.config.ts` gap noted.*
+*Updated 2026-06-04: Waves 0–2 complete; start Wave 3 (application backend).*

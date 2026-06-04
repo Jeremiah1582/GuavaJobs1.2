@@ -23,6 +23,11 @@ const nextConfig: NextConfig = {
         destination: "/dashboard/jobs",
         permanent: true,
       },
+      {
+        source: "/login",
+        destination: "/sign-in",
+        permanent: false,
+      },
     ];
   },
   serverExternalPackages: ["pdfjs-dist", "@prisma/client", "@prisma/adapter-pg", "pg"],

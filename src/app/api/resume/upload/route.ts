@@ -1,6 +1,9 @@
 // src/app/api/resume/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma, ensureUserResumeDir } from "@/db";
 import { complete, parseJSON, MODEL_FAST } from "@/lib/llm";
 import { randomUUID } from "crypto";
@@ -486,7 +489,9 @@ ${excerpt}`;
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
 
     const formData = await req.formData();
     const file     = formData.get("resume") as File | null;
@@ -535,7 +540,7 @@ export async function POST(req: NextRequest) {
     const cleanedText = cleanText(extractedText);
     const structured  = await parseStructuredResume(cleanedText);
 
-    const userDir      = ensureUserResumeDir(user.id);
+    const userDir      = ensureUserResumeDir(userId);
     const safeFilename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const filepath     = path.join(userDir, safeFilename);
     await fs.writeFile(filepath, fileBuffer);
@@ -723,7 +728,7 @@ Max 60 words per fix. Use \\n for newlines.`;
     // FIX: save improvements as full JSON objects so GET can restore them perfectly
     // FIX: save all derived fields in metadata so GET doesn't have to recalculate
     await prisma.resume.updateMany({
-      where: { userId: user.id },
+      where: { userId: userId },
       data: { isActive: 0 },
     });
 
@@ -731,7 +736,7 @@ Max 60 words per fix. Use \\n for newlines.`;
     await prisma.resume.create({
       data: {
         id,
-        userId: user.id,
+        userId: userId,
         filename: file.name,
         filepath,
         rawText: cleanedText,
@@ -758,7 +763,7 @@ Max 60 words per fix. Use \\n for newlines.`;
     });
 
     scoreExistingJobs(
-      user.id, id,
+      userId, id,
       rules.technicalSkills.length > 0 ? rules.technicalSkills : rules.presentKeywords,
       cleanedText
     ).catch(console.error);

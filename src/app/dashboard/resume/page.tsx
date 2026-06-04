@@ -2,8 +2,24 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { parseApiResponse } from "@/lib/parse-api-response";
+import {
+  applyResumeToProfileAction,
+  getProfileCompletenessAction,
+} from "@/lib/profile/actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   FileText, Upload, CheckCircle, AlertTriangle, ArrowLeft,
   Star, TrendingUp, FileUp, Loader2, BarChart3, Award,
@@ -373,6 +389,78 @@ export default function ResumeAnalyzer() {
   const [result, setResult]           = useState<ResumeResult | null>(null);
   const [error, setError]             = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
+  const [profileOverwriteOpen, setProfileOverwriteOpen] = useState(false);
+  const [pendingResumeId, setPendingResumeId] = useState<string | null>(null);
+  const [profileSyncing, setProfileSyncing] = useState(false);
+
+  const offerProfileSyncFromResume = useCallback(
+    async (resume: ResumeResult) => {
+      if (!resume.id) return;
+
+      const completeness = await getProfileCompletenessAction();
+      if ("error" in completeness) {
+        console.warn("[resume] completeness check:", completeness.error);
+        return;
+      }
+
+      if (completeness.percent === 100) {
+        setPendingResumeId(resume.id);
+        setProfileOverwriteOpen(true);
+        return;
+      }
+
+      setProfileSyncing(true);
+      try {
+        const result = await applyResumeToProfileAction(resume.id, "merge");
+        if (result?.error) {
+          toast.error(result.error);
+          return;
+        }
+        if (!result.updated) {
+          toast.message("No new profile fields to fill from this scan.");
+          return;
+        }
+        toast.success("Profile updated from your scan", {
+          action: {
+            label: "View profile",
+            onClick: () => router.push("/dashboard/profile"),
+          },
+        });
+      } finally {
+        setProfileSyncing(false);
+      }
+    },
+    [router],
+  );
+
+  const confirmProfileOverwrite = useCallback(async () => {
+    if (!pendingResumeId) return;
+    setProfileSyncing(true);
+    try {
+      const result = await applyResumeToProfileAction(
+        pendingResumeId,
+        "overwrite",
+      );
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (!result.updated) {
+        toast.message("No profile fields were replaced from this scan.");
+        return;
+      }
+      toast.success("Profile replaced with data from this scan", {
+        action: {
+          label: "View profile",
+          onClick: () => router.push("/dashboard/profile"),
+        },
+      });
+      setProfileOverwriteOpen(false);
+      setPendingResumeId(null);
+    } finally {
+      setProfileSyncing(false);
+    }
+  }, [pendingResumeId, router]);
 
   useEffect(() => {
     fetch("/api/resume")
@@ -405,11 +493,16 @@ export default function ResumeAnalyzer() {
       const res  = await fetch("/api/resume/upload", { method: "POST", body: formData });
       const data = await parseApiResponse<{ error?: string; resume?: ResumeResult }>(res);
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
-      setResult(data.resume);
+      const uploaded = data.resume;
+      setResult(uploaded ?? null);
       setFile(null);
       setStatus("done");
-    } catch (err: any) {
-      setError(err.message ?? "Something went wrong.");
+      if (uploaded) {
+        void offerProfileSyncFromResume(uploaded);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setError(message);
       setStatus("error");
     }
   };
@@ -850,6 +943,44 @@ export default function ResumeAnalyzer() {
           )}
         </AnimatePresence>
       </div>
+
+      <AlertDialog
+        open={profileOverwriteOpen}
+        onOpenChange={setProfileOverwriteOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace profile with scan data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your profile is already complete. Replacing will overwrite your
+              summary, skills, experience, and education with data from this
+              scan. You can edit everything afterward on your profile page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={profileSyncing}>
+              Keep current profile
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={profileSyncing}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmProfileOverwrite();
+              }}
+            >
+              {profileSyncing ? "Updating…" : "Replace from scan"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+          <p className="px-6 pb-4 text-center text-xs text-muted-foreground">
+            <Link
+              href="/dashboard/profile"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              View profile
+            </Link>
+          </p>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

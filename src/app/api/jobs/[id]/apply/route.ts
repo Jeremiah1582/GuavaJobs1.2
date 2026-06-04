@@ -1,6 +1,9 @@
 // src/app/api/jobs/[id]/apply/route.ts — track applied job id + source only
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/session";
+import {
+  getLegacyApiSession,
+  isSessionResponse,
+} from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { randomUUID } from "crypto";
 import { getCachedJobForUser } from "@/lib/jobs-api";
@@ -10,11 +13,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireAuth();
+    const session = await getLegacyApiSession();
+    if (isSessionResponse(session)) return session;
+    const userId = session.id;
     const { id: jobExternalId } = await params;
 
     const existing = await prisma.appliedJob.findFirst({
-      where: { userId: user.id, jobExternalId },
+      where: { userId, jobExternalId },
     });
 
     if (existing) {
@@ -22,7 +27,7 @@ export async function POST(
       return NextResponse.json({ applied: false });
     }
 
-    const cached = await getCachedJobForUser(user.id, jobExternalId);
+    const cached = await getCachedJobForUser(userId, jobExternalId);
     if (!cached) {
       return NextResponse.json(
         { error: "Job not in cache. Scan jobs first." },
@@ -33,7 +38,7 @@ export async function POST(
     await prisma.appliedJob.create({
       data: {
         id: randomUUID(),
-        userId: user.id,
+        userId,
         jobExternalId,
         source: cached.source,
       },
