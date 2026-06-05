@@ -4,7 +4,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { llm, MODEL_SMART } from "@/lib/llm";
 import { randomUUID } from "crypto";
 import { toEpochMsNumber } from "@/lib/epoch-ms";
@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const session = await getLegacyApiSession();
     if (isSessionResponse(session)) return session;
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await getPrisma().chatMessage.findMany({
       where: { userId: session.id },
       orderBy: { createdAt: "asc" },
       take: 100,
@@ -36,7 +36,7 @@ export async function DELETE() {
   try {
     const session = await getLegacyApiSession();
     if (isSessionResponse(session)) return session;
-    await prisma.chatMessage.deleteMany({ where: { userId: session.id } });
+    await getPrisma().chatMessage.deleteMany({ where: { userId: session.id } });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Failed to clear chat." }, { status: 500 });
@@ -53,17 +53,17 @@ export async function POST(req: NextRequest) {
     if (!message?.trim())
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
 
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId, isActive: 1 },
     });
 
-    const history = await prisma.chatMessage.findMany({
+    const history = await getPrisma().chatMessage.findMany({
       where: { userId },
       orderBy: { createdAt: "asc" },
       take: 20,
     });
 
-    await prisma.chatMessage.create({
+    await getPrisma().chatMessage.create({
       data: {
         id: randomUUID(),
         userId,
@@ -112,7 +112,7 @@ ${resumeContext}`;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
             }
           }
-          await prisma.chatMessage.create({
+          await getPrisma().chatMessage.create({
             data: {
               id: randomUUID(),
               userId,

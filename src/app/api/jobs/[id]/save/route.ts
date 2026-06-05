@@ -6,7 +6,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { randomUUID } from "crypto";
 import {
   cacheRowToSnapshot,
@@ -49,12 +49,12 @@ export async function POST(
       /* empty body is fine when job is in cache */
     }
 
-    const existing = await prisma.savedJob.findFirst({
+    const existing = await getPrisma().savedJob.findFirst({
       where: { userId, jobExternalId },
     });
 
     if (existing) {
-      await prisma.savedJob.delete({ where: { id: existing.id } });
+      await getPrisma().savedJob.delete({ where: { id: existing.id } });
       return NextResponse.json({ saved: false, jobId: jobExternalId });
     }
 
@@ -76,7 +76,7 @@ export async function POST(
       );
     }
 
-    await prisma.savedJob.create({
+    await getPrisma().savedJob.create({
       data: {
         id: randomUUID(),
         userId,

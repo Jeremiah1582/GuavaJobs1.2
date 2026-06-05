@@ -1,6 +1,6 @@
 // src/lib/jobs-api.ts — job cache (SerpAPI) + user saved/applied refs
 
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import type { AppliedJob, Job, JobMatch, SavedJob } from "@/generated/prisma";
 import { epochMsNow, epochMsToDate } from "@/lib/epoch-ms";
 import type { ScrapedJob } from "@/lib/scraper";
@@ -40,12 +40,12 @@ export type JobListItem = {
 /** Mark abandoned scrape runs so "Scan Jobs" is not blocked forever. */
 export async function clearStaleScrapeRuns(): Promise<number> {
   const cutoff = Date.now() - STALE_SCRAPE_MS;
-  const stale = await prisma.scrapeRun.findMany({
+  const stale = await getPrisma().scrapeRun.findMany({
     where: { status: "running", startedAt: { lt: cutoff } },
   });
 
   for (const run of stale) {
-    await prisma.scrapeRun.update({
+    await getPrisma().scrapeRun.update({
       where: { id: run.id },
       data: {
         status: "error",
@@ -60,8 +60,8 @@ export async function clearStaleScrapeRuns(): Promise<number> {
 
 /** Remove all cached listings (keeps user saved/applied refs). */
 export async function purgeAllJobCache(): Promise<void> {
-  await prisma.jobMatch.deleteMany();
-  await prisma.job.deleteMany();
+  await getPrisma().jobMatch.deleteMany();
+  await getPrisma().job.deleteMany();
 }
 
 /** Replace this user's SerpAPI cache with a fresh scrape (upsert + prune stale). */
@@ -69,7 +69,7 @@ export async function replaceUserJobCache(
   userId: string,
   scraped: ScrapedJob[],
 ): Promise<number> {
-  const existing = await prisma.job.findMany({
+  const existing = await getPrisma().job.findMany({
     where: { userId },
     select: { id: true },
   });
@@ -77,7 +77,7 @@ export async function replaceUserJobCache(
   const removeIds = existing.map((j) => j.id).filter((id) => !newIds.has(id));
 
   if (removeIds.length > 0) {
-    await prisma.job.deleteMany({
+    await getPrisma().job.deleteMany({
       where: { userId, id: { in: removeIds } },
     });
   }
@@ -103,7 +103,7 @@ export async function replaceUserJobCache(
       isActive: 1,
       scrapedAt,
     };
-    await prisma.job.upsert({
+    await getPrisma().job.upsert({
       where: { id: job.id },
       create: { id: job.id, ...data },
       update: data,
@@ -215,17 +215,17 @@ export async function listJobsForUser(
   applied: AppliedJob[];
 }> {
   const [cached, matches, saved, applied] = await Promise.all([
-    prisma.job.findMany({
+    getPrisma().job.findMany({
       where: { userId, isActive: 1 },
       orderBy: { scrapedAt: "desc" },
     }),
     resumeId
-      ? prisma.jobMatch.findMany({
+      ? getPrisma().jobMatch.findMany({
           where: { userId, resumeId },
         })
       : Promise.resolve([] as JobMatch[]),
-    prisma.savedJob.findMany({ where: { userId } }),
-    prisma.appliedJob.findMany({ where: { userId } }),
+    getPrisma().savedJob.findMany({ where: { userId } }),
+    getPrisma().appliedJob.findMany({ where: { userId } }),
   ]);
 
   return { cached, matches, saved, applied };
@@ -292,12 +292,12 @@ export async function getCachedJobForUser(
   userId: string,
   jobId: string,
 ): Promise<Job | null> {
-  const owned = await prisma.job.findFirst({
+  const owned = await getPrisma().job.findFirst({
     where: { id: jobId, userId },
   });
   if (owned) return owned;
   // Job ids are global across scrapes; fall back when row was cached under another session.
-  return prisma.job.findUnique({ where: { id: jobId } });
+  return getPrisma().job.findUnique({ where: { id: jobId } });
 }
 
 export async function resolveJobForUser(
@@ -307,7 +307,7 @@ export async function resolveJobForUser(
   const cached = await getCachedJobForUser(userId, jobId);
   if (cached) return cacheRowToSnapshot(cached);
 
-  const saved = await prisma.savedJob.findFirst({
+  const saved = await getPrisma().savedJob.findFirst({
     where: { userId, jobExternalId: jobId },
   });
   if (saved) return snapshotFromSavedRow(saved.snapshot, jobId);
@@ -316,7 +316,7 @@ export async function resolveJobForUser(
 }
 
 export async function countUserCachedJobs(userId: string): Promise<number> {
-  return prisma.job.count({
+  return getPrisma().job.count({
     where: { userId, isActive: 1 },
   });
 }
@@ -324,16 +324,16 @@ export async function countUserCachedJobs(userId: string): Promise<number> {
 /** Delete match rows for jobs no longer in this user's cache (after re-scrape). */
 export async function pruneOrphanMatches(userId: string, validJobIds: string[]): Promise<void> {
   if (validJobIds.length === 0) {
-    await prisma.jobMatch.deleteMany({ where: { userId } });
+    await getPrisma().jobMatch.deleteMany({ where: { userId } });
     return;
   }
-  const all = await prisma.jobMatch.findMany({
+  const all = await getPrisma().jobMatch.findMany({
     where: { userId },
     select: { id: true, jobId: true },
   });
   const valid = new Set(validJobIds);
   const orphanIds = all.filter((m) => !valid.has(m.jobId)).map((m) => m.id);
   if (orphanIds.length > 0) {
-    await prisma.jobMatch.deleteMany({ where: { id: { in: orphanIds } } });
+    await getPrisma().jobMatch.deleteMany({ where: { id: { in: orphanIds } } });
   }
 }

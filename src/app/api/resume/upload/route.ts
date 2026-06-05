@@ -729,13 +729,13 @@ Max 60 words per fix. Use \\n for newlines.`;
     // ── Step 6: Save to DB ──
     // FIX: save improvements as full JSON objects so GET can restore them perfectly
     // FIX: save all derived fields in metadata so GET doesn't have to recalculate
-    await prisma.resume.updateMany({
+    await getPrisma().resume.updateMany({
       where: { userId: userId },
       data: { isActive: 0 },
     });
 
     const id = randomUUID();
-    await prisma.resume.create({
+    await getPrisma().resume.create({
       data: {
         id,
         userId: userId,
@@ -814,7 +814,7 @@ async function scoreExistingJobs(
     const { computeMatchScore, resetGroqCallCounter } = await import("@/lib/job-matcher");
     const { randomUUID } = await import("crypto");
 
-    const allJobs = await prisma.job.findMany({
+    const allJobs = await getPrisma().job.findMany({
       where: { userId, isActive: 1 },
     });
     if (allJobs.length === 0) return;
@@ -829,7 +829,7 @@ async function scoreExistingJobs(
       await Promise.all(
         allJobs.slice(i, i + BATCH).map(async (job) => {
           try {
-            const exists = await prisma.jobMatch.findFirst({
+            const exists = await getPrisma().jobMatch.findFirst({
               where: { jobId: job.id, resumeId },
             });
             if (exists) return;
@@ -838,7 +838,7 @@ async function scoreExistingJobs(
               skills, rawText, job.title, job.description,
               JSON.parse(job.requiredSkills),
             );
-            await prisma.jobMatch.create({
+            await getPrisma().jobMatch.create({
               data: {
                 id: randomUUID(),
                 userId,

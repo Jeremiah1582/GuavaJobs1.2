@@ -1,4 +1,4 @@
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { ApiErrorCode } from "../../api/errors";
 import { generateCoverLetterWithOpenAI } from "../../ai/generate-cover-letter";
 import { isProfileReadyForAi } from "../../ai/profile-readiness";
@@ -23,7 +23,7 @@ export type GenerateCoverLetterResult = {
 };
 
 async function getUserDisplayName(userId: string): Promise<string | null> {
-  const user = await prisma.user.findUnique({
+  const user = await getPrisma().user.findUnique({
     where: { id: userId },
     select: { displayName: true },
   });

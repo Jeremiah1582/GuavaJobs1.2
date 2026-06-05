@@ -6,7 +6,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { complete, MODEL_SMART } from "@/lib/llm";
 import { randomUUID } from "crypto";
 import { resumeTextForAI } from "@/lib/pdf-extract.server";
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         { status: 404 },
       );
 
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId, isActive: 1 },
     });
     if (!resume)
@@ -65,7 +65,7 @@ Rules: ${TONES[tone] ?? TONES.professional} Open "Dear Hiring Manager,". 3 parag
     const content = await complete(prompt, undefined, 0.5, MODEL_SMART, 600);
 
     const id = randomUUID();
-    await prisma.legacyCoverLetter.create({
+    await getPrisma().legacyCoverLetter.create({
       data: {
         id,
         userId,
@@ -97,7 +97,7 @@ export async function GET() {
     if (isSessionResponse(session)) return session;
     const userId = session.id;
 
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId, isActive: 1 },
     });
 
@@ -116,7 +116,7 @@ export async function GET() {
         matchScore: j.matchScore,
       }));
 
-    const letters = await prisma.legacyCoverLetter.findMany({
+    const letters = await getPrisma().legacyCoverLetter.findMany({
       where: { userId },
       orderBy: { generatedAt: "desc" },
     });

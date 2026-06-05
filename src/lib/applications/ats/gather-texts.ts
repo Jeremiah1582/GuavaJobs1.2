@@ -1,4 +1,4 @@
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import type { ApplicationBundle } from "../types";
 import { formatProfileSnapshotForPrompt } from "../profile-prompt";
 
@@ -13,13 +13,13 @@ export async function gatherApplicationTexts(
 ): Promise<ApplicationTexts> {
   const letterText = bundle.letter?.content?.trim() ?? "";
 
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: bundle.application.id, userId },
     select: { resumeId: true },
   });
 
   if (application?.resumeId) {
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { id: application.resumeId, userId, isActive: 1 },
       select: { rawText: true },
     });

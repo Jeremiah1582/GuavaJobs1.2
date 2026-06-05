@@ -19,7 +19,7 @@ import {
   resolveJobDescriptionText,
 } from "./snapshots";
 import { ApiErrorCode } from "../api/errors";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import {
   applicationNoteSchema,
   applicationNoteUpdateSchema,
@@ -60,7 +60,7 @@ import type {
 } from "./types";
 
 export async function latestActiveResumeId(userId: string): Promise<string | null> {
-  const resume = await prisma.resume.findFirst({
+  const resume = await getPrisma().resume.findFirst({
     where: { userId, isActive: 1 },
     orderBy: { uploadedAt: "desc" },
     select: { id: true },
@@ -98,8 +98,8 @@ async function writeProfileSnapshotFromUser(
   userId: string,
 ): Promise<ApplicationProfileSnapshotDto> {
   
-  const profile = await prisma.profile.findUnique({ where: { userId } });
-  const row = await prisma.applicationProfileSnapshot.upsert({
+  const profile = await getPrisma().profile.findUnique({ where: { userId } });
+  const row = await getPrisma().applicationProfileSnapshot.upsert({
     where: { applicationId },
     create: {
       applicationId,
@@ -125,7 +125,7 @@ async function captureProfileSnapshot(
   userId: string,
 ): Promise<void> {
   
-  const existing = await prisma.applicationProfileSnapshot.findUnique({
+  const existing = await getPrisma().applicationProfileSnapshot.findUnique({
     where: { applicationId },
   });
   if (existing) return;
@@ -150,7 +150,7 @@ async function ensureJobSnapshotsPersisted(application: Application): Promise<Ap
   const text = descriptionText ?? application.jobDescriptionSnapshot?.trim() ?? null;
   
 
-  return prisma.application.update({
+  return getPrisma().application.update({
     where: { id: application.id },
     data: jobSnapshotPersistPayload(snapshot, text),
   });
@@ -161,12 +161,12 @@ async function ensureProfileSnapshotForApplication(
   userId: string,
 ): Promise<ApplicationProfileSnapshotDto | null> {
   
-  let row = await prisma.applicationProfileSnapshot.findUnique({
+  let row = await getPrisma().applicationProfileSnapshot.findUnique({
     where: { applicationId },
   });
   if (!row) {
     await captureProfileSnapshot(applicationId, userId);
-    row = await prisma.applicationProfileSnapshot.findUnique({
+    row = await getPrisma().applicationProfileSnapshot.findUnique({
       where: { applicationId },
     });
   }
@@ -246,7 +246,7 @@ async function assertOwned(
   applicationId: string,
 ): Promise<Application> {
   
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
   });
   if (!application) {
@@ -264,7 +264,7 @@ export async function findByUserAndExternalId(
   jobExternalId: string,
 ): Promise<Application | null> {
   
-  return prisma.application.findFirst({
+  return getPrisma().application.findFirst({
     where: { userId, jobExternalId },
   });
 }
@@ -290,7 +290,7 @@ export async function createFromJobListing(
   const resumeId = await latestActiveResumeId(userId);
 
   try {
-    const created = await prisma.application.create({
+    const created = await getPrisma().application.create({
       data: {
         userId,
         jobExternalId: job.id,
@@ -347,7 +347,7 @@ export async function createManual(
 
   const resumeId = await latestActiveResumeId(userId);
 
-  const created = await prisma.application.create({
+  const created = await getPrisma().application.create({
     data: {
       userId,
       title: parsed.title,
@@ -370,7 +370,7 @@ export async function createManual(
 
 export async function listByUser(userId: string): Promise<ApplicationListItem[]> {
   
-  const rows = await prisma.application.findMany({
+  const rows = await getPrisma().application.findMany({
     where: { userId },
     orderBy: { updatedAt: "desc" },
     select: {
@@ -430,7 +430,7 @@ export async function getByIdForUser(
   applicationId: string,
 ): Promise<ApplicationDetail> {
   
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     include: {
       timelineNotes: { orderBy: { createdAt: "desc" } },
@@ -479,7 +479,7 @@ export async function getBundleForUser(
   applicationId: string,
 ): Promise<ApplicationBundle> {
   
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     include: {
       timelineNotes: { orderBy: { createdAt: "desc" } },
@@ -594,7 +594,7 @@ export async function update(
     descriptionChanged = text !== resolveJobDescriptionText(existing);
   }
 
-  await prisma.application.update({
+  await getPrisma().application.update({
     where: { id: applicationId },
     data,
   });
@@ -622,7 +622,7 @@ export async function advanceStage(
   }
 
   if (existing.status === "INTERVIEW") {
-    await prisma.application.update({
+    await getPrisma().application.update({
       where: { id: applicationId },
       data: { interviewRound: (existing.interviewRound ?? 0) + 1 },
     });
@@ -646,7 +646,7 @@ export async function advanceStage(
     data.interviewRound = existing.interviewRound ?? 1;
   }
 
-  await prisma.application.update({ where: { id: applicationId }, data });
+  await getPrisma().application.update({ where: { id: applicationId }, data });
   return getByIdForUser(userId, applicationId);
 }
 
@@ -664,7 +664,7 @@ export async function markRejected(
       ? "POST_INTERVIEW"
       : "PRE_INTERVIEW");
 
-  await prisma.application.update({
+  await getPrisma().application.update({
     where: { id: applicationId },
     data: {
       rejectionPhase: resolved,
@@ -681,7 +681,7 @@ export async function clearRejection(
 ): Promise<ApplicationDetail> {
   await assertOwned(userId, applicationId);
   
-  await prisma.application.update({
+  await getPrisma().application.update({
     where: { id: applicationId },
     data: { rejectionPhase: null, rejectedAt: null },
   });
@@ -700,7 +700,7 @@ export async function setInterviewDetails(
   await assertOwned(userId, applicationId);
   
 
-  await prisma.application.update({
+  await getPrisma().application.update({
     where: { id: applicationId },
     data: {
       status: "INTERVIEW",
@@ -719,7 +719,7 @@ export async function setInterviewDetails(
 export async function remove(userId: string, applicationId: string): Promise<void> {
   await assertOwned(userId, applicationId);
   
-  await prisma.application.delete({ where: { id: applicationId } });
+  await getPrisma().application.delete({ where: { id: applicationId } });
 }
 
 export async function listNotes(
@@ -728,7 +728,7 @@ export async function listNotes(
 ): Promise<ApplicationNoteDto[]> {
   await assertOwned(userId, applicationId);
   
-  const notes = await prisma.applicationNote.findMany({
+  const notes = await getPrisma().applicationNote.findMany({
     where: { applicationId },
     orderBy: { createdAt: "desc" },
   });
@@ -744,7 +744,7 @@ export async function createNote(
   await assertOwned(userId, applicationId);
 
   
-  const note = await prisma.applicationNote.create({
+  const note = await getPrisma().applicationNote.create({
     data: {
       applicationId,
       body: parsed.body,
@@ -763,7 +763,7 @@ export async function updateNote(
   await assertOwned(userId, applicationId);
 
   
-  const note = await prisma.applicationNote.findFirst({
+  const note = await getPrisma().applicationNote.findFirst({
     where: { id: noteId, applicationId },
   });
   if (!note) {
@@ -774,7 +774,7 @@ export async function updateNote(
     );
   }
 
-  const updated = await prisma.applicationNote.update({
+  const updated = await getPrisma().applicationNote.update({
     where: { id: noteId },
     data: { body: parsed.body },
   });
@@ -788,7 +788,7 @@ export async function deleteNote(
 ): Promise<void> {
   await assertOwned(userId, applicationId);
   
-  const note = await prisma.applicationNote.findFirst({
+  const note = await getPrisma().applicationNote.findFirst({
     where: { id: noteId, applicationId },
   });
   if (!note) {
@@ -798,7 +798,7 @@ export async function deleteNote(
       404,
     );
   }
-  await prisma.applicationNote.delete({ where: { id: noteId } });
+  await getPrisma().applicationNote.delete({ where: { id: noteId } });
 }
 
 export { ApplicationsServiceError } from "./errors";
@@ -809,7 +809,7 @@ export async function setApplicationResume(
   resumeId: string | null,
 ): Promise<void> {
   await assertOwned(userId, applicationId);
-  await prisma.application.update({
+  await getPrisma().application.update({
     where: { id: applicationId },
     data: { resumeId },
   });

@@ -1,13 +1,13 @@
 export const dynamic = "force-dynamic";
 
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { API_VERSION } from "@/lib/api/version";
 import { jsonSuccess } from "@/lib/api/response";
 import { withErrorHandler } from "@/lib/api/with-error-handler";
 
 export const GET = withErrorHandler(async () => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await getPrisma().$queryRaw`SELECT 1`;
     return jsonSuccess({
       ok: true,
       status: "ok",

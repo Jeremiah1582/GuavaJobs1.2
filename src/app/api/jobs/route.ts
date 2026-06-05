@@ -6,7 +6,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import {
   buildJobListItems,
   clearStaleScrapeRuns,
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")?.toLowerCase() ?? "";
     const filter = searchParams.get("filter") ?? "all";
 
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId, isActive: 1 },
     });
 

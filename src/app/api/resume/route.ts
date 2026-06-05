@@ -6,7 +6,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import type { Resume } from "@/generated/prisma";
 
 function scoreToGrade(score: number): string {
@@ -77,7 +77,7 @@ export async function GET() {
   try {
     const session = await getLegacyApiSession();
     if (isSessionResponse(session)) return session;
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId: session.id, isActive: 1 },
       orderBy: { uploadedAt: "desc" },
     });

@@ -13,7 +13,7 @@ export async function ensureUser(input: SessionUser): Promise<User> {
   const user = validateSessionUser(input);
   const displayName = defaultDisplayName(user.email, input.displayName);
 
-  return prisma.user.upsert({
+  return getPrisma().user.upsert({
     where: { id: user.id },
     create: {
       id: user.id,
@@ -29,7 +29,7 @@ export async function ensureUser(input: SessionUser): Promise<User> {
 
 export async function deleteUser(id: string): Promise<void> {
   
-  await prisma.user.delete({ where: { id } })
+  await getPrisma().user.delete({ where: { id } })
 }
 
 export const usersService = {

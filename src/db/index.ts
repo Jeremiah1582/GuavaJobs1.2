@@ -70,29 +70,25 @@ function getPrismaClient(): PrismaClient {
 let __prismaInstance: PrismaClient | null = null;
 
 /**
- * Get the Prisma client instance. Lazily initializes on first call.
- * This defers DATABASE_URL requirement from module-load-time to first-use-time,
- * allowing the dev server to start even when the env var is not set yet.
+ * Get the Prisma client singleton. Lazily initializes on first call.
+ * This defers DATABASE_URL requirement from module-load-time to first-use-time.
  */
-function getPrismaSingleton(): PrismaClient {
+export function getPrisma(): PrismaClient {
   if (__prismaInstance === null) {
     __prismaInstance = getPrismaClient();
   }
   return __prismaInstance;
 }
 
-// Export for use in API routes
+/**
+ * Deprecated: use getPrisma() instead. Kept for backward compatibility.
+ * This will be removed in a future version.
+ */
 export const prisma = new Proxy(
   {},
   {
     get(target: any, prop: PropertyKey) {
-      const client = getPrismaSingleton();
-      const value = Reflect.get(client, prop);
-      // Bind methods to the client to preserve `this` context
-      if (typeof value === "function") {
-        return value.bind(client);
-      }
-      return value;
+      return Reflect.get(getPrisma(), prop);
     },
   },
 ) as PrismaClient;

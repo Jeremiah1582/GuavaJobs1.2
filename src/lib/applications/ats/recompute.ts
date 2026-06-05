@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { ApiErrorCode } from "@/lib/api/errors";
 import { applicationsService } from "../service";
 import { resolveJobDescriptionForApplication } from "../snapshots";
@@ -125,7 +125,7 @@ function mapReportRow(
 async function loadIcpForApplication(
   applicationId: string,
 ): Promise<IdealCandidateProfile | null> {
-  const application = await prisma.application.findUnique({
+  const application = await getPrisma().application.findUnique({
     where: { id: applicationId },
     select: {
       jobInsight: {
@@ -142,13 +142,13 @@ export async function getReportForApplication(
   userId: string,
   applicationId: string,
 ): Promise<ApplicationAtsReportDto | null> {
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     select: { id: true },
   });
   if (!application) return null;
 
-  const row = await prisma.applicationAtsReport.findUnique({
+  const row = await getPrisma().applicationAtsReport.findUnique({
     where: { applicationId },
   });
   if (!row) return null;
@@ -194,7 +194,7 @@ export async function recomputeReport(
   applicationId: string,
   _trigger: AtsRecomputeTrigger,
 ): Promise<ApplicationAtsReportDto> {
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
   });
 
@@ -242,7 +242,7 @@ export async function recomputeReport(
   }
 
   if (hydrated.jobInsightId !== jobInsight.id) {
-    await prisma.application.update({
+    await getPrisma().application.update({
       where: { id: applicationId },
       data: { jobInsightId: jobInsight.id },
     });
@@ -269,13 +269,13 @@ export async function recomputeReport(
     jobInsight.id,
   );
 
-  const existing = await prisma.applicationAtsReport.findUnique({
+  const existing = await getPrisma().applicationAtsReport.findUnique({
     where: { applicationId },
     select: { inputFingerprint: true },
   });
 
   if (existing?.inputFingerprint === fingerprint && icpMatch) {
-    const row = await prisma.applicationAtsReport.findUnique({
+    const row = await getPrisma().applicationAtsReport.findUnique({
       where: { applicationId },
     });
     if (row) {
@@ -290,7 +290,7 @@ export async function recomputeReport(
   const tips = buildTips(requirements, scores.letterMatch, scores.cvMatch, icpMatch);
   const now = new Date();
 
-  const row = await prisma.applicationAtsReport.upsert({
+  const row = await getPrisma().applicationAtsReport.upsert({
     where: { applicationId },
     create: {
       applicationId,

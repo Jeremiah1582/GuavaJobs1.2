@@ -91,7 +91,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
 
   const [atsReport, resumeLink] = await Promise.all([
     getReportForApplication(session.id, id),
-    prisma.application.findFirst({
+    getPrisma().application.findFirst({
       where: { id, userId: session.id },
       select: { resumeId: true },
     }),

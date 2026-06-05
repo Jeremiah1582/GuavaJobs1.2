@@ -6,7 +6,7 @@ import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { randomUUID } from "crypto";
 import { computeMatchScore, resetGroqCallCounter } from "@/lib/job-matcher";
 import {
@@ -28,7 +28,7 @@ export async function GET() {
     const session = await getLegacyApiSession();
     if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
-    const latest = await prisma.scrapeRun.findFirst({
+    const latest = await getPrisma().scrapeRun.findFirst({
       orderBy: { startedAt: "desc" },
     });
     const jobCount = await countUserCachedJobs(session.id);
@@ -53,7 +53,7 @@ export async function POST() {
     if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
 
-    const running = await prisma.scrapeRun.findFirst({
+    const running = await getPrisma().scrapeRun.findFirst({
       where: { status: "running" },
     });
     if (running) {
@@ -73,7 +73,7 @@ export async function POST() {
       );
     }
 
-    const resume = await prisma.resume.findFirst({
+    const resume = await getPrisma().resume.findFirst({
       where: { userId: session.id, isActive: 1 },
     });
     if (!resume) {
@@ -84,7 +84,7 @@ export async function POST() {
     }
 
     const runId = randomUUID();
-    await prisma.scrapeRun.create({ data: { id: runId, status: "running" } });
+    await getPrisma().scrapeRun.create({ data: { id: runId, status: "running" } });
     runScraper(runId, session.id, resume).catch(console.error);
 
     return NextResponse.json({ message: "Scrape started.", runId });
@@ -195,7 +195,7 @@ async function runScraper(
 
     if (scraped.length === 0) {
       await replaceUserJobCache(userId, []);
-      await prisma.scrapeRun.update({
+      await getPrisma().scrapeRun.update({
         where: { id: runId },
         data: {
           status: "done",
@@ -227,7 +227,7 @@ async function runScraper(
     for (let i = 0; i < scraped.length; i += BATCH) {
       await Promise.all(
         scraped.slice(i, i + BATCH).map(async (job) => {
-          const alreadyScored = await prisma.jobMatch.findFirst({
+          const alreadyScored = await getPrisma().jobMatch.findFirst({
             where: { jobId: job.id, resumeId: resume.id },
           });
           if (alreadyScored) return;
@@ -240,7 +240,7 @@ async function runScraper(
               job.description,
               job.requiredSkills,
             );
-            await prisma.jobMatch.create({
+            await getPrisma().jobMatch.create({
               data: {
                 id: randomUUID(),
                 userId,
@@ -264,14 +264,14 @@ async function runScraper(
 
     console.log(`[scrape] ${cached} cached, ${scored} scored`);
 
-    await prisma.scrapeRun.update({
+    await getPrisma().scrapeRun.update({
       where: { id: runId },
       data: { status: "done", finishedAt: epochMsNow(), jobsFound: cached },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[scrape] Fatal:", err);
-    await prisma.scrapeRun.update({
+    await getPrisma().scrapeRun.update({
       where: { id: runId },
       data: { status: "error", finishedAt: epochMsNow(), error: message },
     });

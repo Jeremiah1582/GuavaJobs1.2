@@ -71,10 +71,10 @@ export async function POST(request: Request) {
 
     const resumeId = parsed.data.resumeId
     const resume = resumeId
-      ? await prisma.resume.findFirst({
+      ? await getPrisma().resume.findFirst({
           where: { id: resumeId, userId: session.id, isActive: 1 },
         })
-      : await prisma.resume.findFirst({
+      : await getPrisma().resume.findFirst({
           where: { userId: session.id, isActive: 1 },
           orderBy: { uploadedAt: "desc" },
         })

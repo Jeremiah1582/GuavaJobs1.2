@@ -5,7 +5,7 @@ import type {
   CoverLetterSource,
   Prisma,
 } from "@/generated/prisma";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { ApiErrorCode } from "../../api/errors";
 import {
   coverLetterContentSchema,
@@ -91,7 +91,7 @@ async function assertApplicationOwned(
   userId: string,
   applicationId: string,
 ): Promise<void> {
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     select: { id: true },
   });
@@ -108,7 +108,7 @@ async function getApplicationWithLetter(
   userId: string,
   applicationId: string,
 ) {
-  return prisma.application.findFirst({
+  return getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     include: { coverLetter: true },
   });
@@ -160,7 +160,7 @@ export async function upsertLetter(
   const parsed = coverLetterContentSchema.parse(input);
   await assertApplicationOwned(userId, applicationId);
 
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId },
     include: { coverLetter: true },
   });
@@ -180,7 +180,7 @@ export async function upsertLetter(
   const isManual = (options?.source ?? "MANUAL") === "MANUAL";
 
   if (application.coverLetter) {
-    const updated = await prisma.applicationCoverLetter.update({
+    const updated = await getPrisma().applicationCoverLetter.update({
       where: { id: application.coverLetter.id },
       data: {
         content: parsed.content,
@@ -194,7 +194,7 @@ export async function upsertLetter(
     return mapLetter(updated, applicationId);
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  const created = await getPrisma().$transaction(async (tx) => {
     const letter = await tx.applicationCoverLetter.create({
       data: {
         content: parsed.content,
@@ -227,7 +227,7 @@ export async function updateLetter(
   const parsed = coverLetterUpdateSchema.parse(input);
   await assertApplicationOwned(userId, applicationId);
 
-  const application = await prisma.application.findFirst({
+  const application = await getPrisma().application.findFirst({
     where: { id: applicationId, userId, coverLetterId: letterId },
     include: { coverLetter: true },
   });
@@ -240,7 +240,7 @@ export async function updateLetter(
     );
   }
 
-  const updated = await prisma.applicationCoverLetter.update({
+  const updated = await getPrisma().applicationCoverLetter.update({
     where: { id: letterId },
     data: { content: parsed.content, isUserEdited: true },
   });

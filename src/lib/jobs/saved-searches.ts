@@ -1,5 +1,5 @@
 import { ApiErrorCode } from "../api/errors";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import {
   savedJobSearchCreateSchema,
   type SavedJobSearchCreateInput,
@@ -49,7 +49,7 @@ function toDto(row: {
 
 export async function listByUser(userId: string): Promise<SavedJobSearchDto[]> {
   
-  const rows = await prisma.savedJobSearch.findMany({
+  const rows = await getPrisma().savedJobSearch.findMany({
     where: { userId },
     orderBy: { updatedAt: "desc" },
   });
@@ -63,7 +63,7 @@ export async function create(
   const parsed = savedJobSearchCreateSchema.parse(input);
   
 
-  const count = await prisma.savedJobSearch.count({ where: { userId } });
+  const count = await getPrisma().savedJobSearch.count({ where: { userId } });
   if (count >= MAX_SAVED_SEARCHES_PER_USER) {
     throw new ApplicationsServiceError(
       ApiErrorCode.VALIDATION_ERROR,
@@ -72,7 +72,7 @@ export async function create(
     );
   }
 
-  const row = await prisma.savedJobSearch.create({
+  const row = await getPrisma().savedJobSearch.create({
     data: {
       userId,
       label: parsed.label,
@@ -89,7 +89,7 @@ export async function create(
 
 export async function remove(userId: string, id: string): Promise<void> {
   
-  const existing = await prisma.savedJobSearch.findFirst({
+  const existing = await getPrisma().savedJobSearch.findFirst({
     where: { id, userId },
   });
   if (!existing) {
@@ -99,7 +99,7 @@ export async function remove(userId: string, id: string): Promise<void> {
       404,
     );
   }
-  await prisma.savedJobSearch.delete({ where: { id } });
+  await getPrisma().savedJobSearch.delete({ where: { id } });
 }
 
 export const savedJobSearchesService = {

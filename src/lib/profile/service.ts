@@ -1,5 +1,5 @@
 import { Prisma, type Profile } from "@/generated/prisma";
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import {
   profileLanguagesSchema,
   profileUpdateSchema,
@@ -191,7 +191,7 @@ const profileWithUserInclude = {
 
 export async function getOrCreateForUser(userId: string): Promise<Profile> {
   
-  return prisma.profile.upsert({
+  return getPrisma().profile.upsert({
     where: { userId },
     create: { userId },
     update: {},
@@ -200,7 +200,7 @@ export async function getOrCreateForUser(userId: string): Promise<Profile> {
 
 export async function getByUserId(userId: string): Promise<ProfileDto | null> {
   
-  const profile = await prisma.profile.findUnique({
+  const profile = await getPrisma().profile.findUnique({
     where: { userId },
     include: profileWithUserInclude,
   });
@@ -289,13 +289,13 @@ export async function update(
   
 
   if (parsed.displayName !== undefined) {
-    await prisma.user.update({
+    await getPrisma().user.update({
       where: { id: userId },
       data: { displayName: parsed.displayName },
     });
   }
 
-  const profile = await prisma.profile.update({
+  const profile = await getPrisma().profile.update({
     where: { userId },
     data,
     include: profileWithUserInclude,

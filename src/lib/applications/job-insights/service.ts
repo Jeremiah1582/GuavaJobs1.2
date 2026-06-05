@@ -1,4 +1,4 @@
-import { prisma } from "@/db";
+import { getPrisma } from "@/db";
 import { extractIdealCandidateProfile, IcpExtractionError } from "./analyze";
 import { descriptionFingerprint } from "./fingerprint";
 import {
@@ -70,7 +70,7 @@ export async function getOrCreateJobInsight(
   const source = input.jobSource?.trim() || null;
 
   if (externalId && source) {
-    const byExternal = await prisma.jobDescriptionInsight.findUnique({
+    const byExternal = await getPrisma().jobDescriptionInsight.findUnique({
       where: {
         jobExternalId_jobSource: { jobExternalId: externalId, jobSource: source },
       },
@@ -81,7 +81,7 @@ export async function getOrCreateJobInsight(
   }
 
   if (externalId) {
-    const byExternalId = await prisma.jobDescriptionInsight.findFirst({
+    const byExternalId = await getPrisma().jobDescriptionInsight.findFirst({
       where: { jobExternalId: externalId },
       orderBy: { analyzedAt: "desc" },
     });
@@ -90,7 +90,7 @@ export async function getOrCreateJobInsight(
     }
   }
 
-  const byFingerprint = await prisma.jobDescriptionInsight.findUnique({
+  const byFingerprint = await getPrisma().jobDescriptionInsight.findUnique({
     where: { descriptionFingerprint: fingerprint },
   });
   if (byFingerprint) {
@@ -106,7 +106,7 @@ export async function getOrCreateJobInsight(
   const now = new Date();
 
   try {
-    const created = await prisma.jobDescriptionInsight.create({
+    const created = await getPrisma().jobDescriptionInsight.create({
       data: {
         jobExternalId: externalId,
         jobSource: source,
@@ -128,7 +128,7 @@ export async function getOrCreateJobInsight(
     ) {
       const existing =
         (externalId && source
-          ? await prisma.jobDescriptionInsight.findUnique({
+          ? await getPrisma().jobDescriptionInsight.findUnique({
               where: {
                 jobExternalId_jobSource: {
                   jobExternalId: externalId,
@@ -137,7 +137,7 @@ export async function getOrCreateJobInsight(
               },
             })
           : null) ??
-        (await prisma.jobDescriptionInsight.findUnique({
+        (await getPrisma().jobDescriptionInsight.findUnique({
           where: { descriptionFingerprint: fingerprint },
         }));
       if (existing) {
