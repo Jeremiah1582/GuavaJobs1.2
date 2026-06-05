@@ -6,9 +6,8 @@ type ApplicationCvSectionProps = {
 
 export function ApplicationCvSection({ cvFileUrl }: ApplicationCvSectionProps) {
   return (
-    <section className="mt-10 rounded-lg border border-border p-4">
-      <h2 className="text-sm font-semibold text-foreground">CV for this application</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
         Attach the CV version you want to use for this role. Full per-application CV AI comes in a
         later release.
       </p>
@@ -26,6 +25,6 @@ export function ApplicationCvSection({ cvFileUrl }: ApplicationCvSectionProps) {
       >
         Upload CV on profile →
       </Link>
-    </section>
+    </div>
   )
 }

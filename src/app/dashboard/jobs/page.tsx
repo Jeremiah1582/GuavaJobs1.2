@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { parseApiResponse } from "@/lib/parse-api-response";
+import { trackJobAction } from "@/lib/applications/track-job";
+import { TrackJobButton } from "@/components/dashboard/track-job-button";
 import {
   Target, ArrowLeft, MapPin, Clock, Building2, ExternalLink,
   Search, SlidersHorizontal, Bookmark, BookmarkCheck,
@@ -377,6 +379,10 @@ export default function JobMatcher() {
                   </div>
                   <div className="flex flex-col items-end gap-3 flex-shrink-0">
                     <ScoreBadge score={job.matchScore} />
+                    <form action={trackJobAction}>
+                      <input type="hidden" name="jobId" value={job.id} />
+                      <TrackJobButton />
+                    </form>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleSave(job)}

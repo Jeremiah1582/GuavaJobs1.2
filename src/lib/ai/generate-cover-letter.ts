@@ -9,6 +9,7 @@ import {
   buildCoverLetterSystemPrompt,
   buildCoverLetterUserPrompt,
   parseCoverLetterGeneration,
+  type CoverLetterAtsContext,
 } from "./cover-letter-prompt";
 import type { JobListingSnapshot } from "../applications/snapshots";
 
@@ -22,6 +23,7 @@ export type GenerateCoverLetterInput = {
   jobListing?: JobListingSnapshot;
   existingLetter?: string | null;
   adaptExisting?: boolean;
+  atsContext?: CoverLetterAtsContext;
 };
 
 export type GenerateCoverLetterAiResult = {
@@ -110,6 +112,7 @@ export async function generateCoverLetterWithOpenAI(
     candidateDisplayName,
     existingLetter: input.existingLetter,
     adaptExisting: input.adaptExisting,
+    atsContext: input.atsContext,
   });
 
   try {

@@ -42,9 +42,17 @@ export const POST = withErrorHandler(async (request, context) => {
 
   await usersService.ensureUser(session)
   try {
-    const parsed = body as { content?: string }
-    const data = await coverLettersService.upsertLetter(session.id, id, {
-      content: String(parsed.content ?? ""),
+    const parsed = body as { content?: unknown }
+    if (typeof parsed.content === "string" && parsed.content.trim()) {
+      const data = await coverLettersService.upsertLetter(session.id, id, {
+        content: parsed.content.trim(),
+      })
+      return jsonSuccess(data, 201)
+    }
+
+    const data = await coverLettersService.generateCoverLetterForBody(session.id, {
+      ...(typeof body === "object" && body !== null ? body : {}),
+      applicationId: id,
     })
     return jsonSuccess(data, 201)
   } catch (err) {

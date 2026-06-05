@@ -10,7 +10,7 @@ export function TrackedToast() {
   useEffect(() => {
     if (searchParams.get("tracked") === "1") {
       toast.success("Application saved as draft", {
-        description: "Expand a row below to add notes or update its status.",
+        description: "Add notes, generate a cover letter, or update its status.",
       })
       const url = new URL(window.location.href)
       url.searchParams.delete("tracked")

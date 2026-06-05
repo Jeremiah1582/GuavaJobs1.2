@@ -1,6 +1,7 @@
 "use client"
 
 import { useActionState, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { AlertCircle, Loader2, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,6 +15,7 @@ import {
   type CareerPreferencesState,
 } from "@/components/profile/career-preferences-section"
 import { QuizSection } from "@/components/profile/quiz-section"
+import { CvProfileImport } from "@/components/profile/cv-profile-import"
 import { UrlImport, type UrlImportApplyPayload } from "@/components/profile/url-import"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -56,6 +58,7 @@ const emptyEducation = (): EducationEntry => ({
 })
 
 export function ProfileForm({ initialProfile }: ProfileFormProps) {
+  const router = useRouter()
   const [displayName, setDisplayName] = useState(
     initialProfile.displayName ?? ""
   )
@@ -143,12 +146,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
 
   useEffect(() => {
     if (uploadState?.success) {
-      toast.success("CV uploaded")
+      toast.success("CV uploaded — you can populate your profile from it below")
+      router.refresh()
     }
     if (uploadState?.error) {
       toast.error(uploadState.error)
     }
-  }, [uploadState])
+  }, [uploadState, router])
 
   function handleCvPaste(data: {
     experience: ExperienceEntry[]
@@ -309,6 +313,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
       {/* Quick Import Section */}
       <section className="space-y-4">
         <UrlImport onImport={handleUrlImport} />
+        <CvProfileImport
+          cvFileUrl={initialProfile.cvFileUrl}
+          onImport={handleUrlImport}
+        />
         <CvPasteHelper onApply={handleCvPaste} />
       </section>
 
@@ -689,8 +697,8 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           CV File (Optional)
         </h2>
         <p className="text-sm text-muted-foreground">
-          Upload a PDF or Word file for reference. Use the paste helper above to
-          auto-fill fields.
+          Upload a PDF or Word file, then use &quot;Use uploaded CV&quot; above to
+          populate your profile. You can also paste text in the helper above.
         </p>
         {initialProfile.cvFileUrl ? (
           <p className="text-sm text-foreground">

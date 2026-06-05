@@ -124,3 +124,52 @@ export function jobSnapshotPersistPayload(
     jobDescriptionSnapshot: text,
   };
 }
+
+/** Resolve JD from application fields, backfilling from Job cache when empty. Persists when backfilled. */
+export async function resolveJobDescriptionForApplication(
+  userId: string,
+  application: Application,
+): Promise<{ application: Application; jdText: string | null }> {
+  let jdText = resolveJobDescriptionText(application);
+  let hydrated = application;
+
+  if (!jdText?.trim() && application.jobExternalId) {
+    const { resolveJobForUser } = await import("../jobs-api");
+    const job = await resolveJobForUser(userId, application.jobExternalId);
+    const fromJob = job?.description?.trim();
+    if (fromJob) {
+      jdText = fromJob;
+      const { prisma } = await import("@/db");
+      const snapshot =
+        parseJobListingSnapshot(application.jobListingSnapshot) ??
+        buildJobListingSnapshotFromApplication(application);
+      const persistData: Record<string, unknown> = jobSnapshotPersistPayload(
+        snapshot,
+        jdText,
+      );
+      if (!application.source?.trim() && job.source?.trim()) {
+        persistData.source = job.source.trim();
+      }
+      hydrated = await prisma.application.update({
+        where: { id: application.id },
+        data: persistData,
+      });
+      return { application: hydrated, jdText };
+    }
+  }
+
+  if (!hydrated.source?.trim() && hydrated.jobExternalId) {
+    const { resolveJobForUser } = await import("../jobs-api");
+    const job = await resolveJobForUser(userId, hydrated.jobExternalId);
+    const jobSource = job?.source?.trim();
+    if (jobSource) {
+      const { prisma } = await import("@/db");
+      hydrated = await prisma.application.update({
+        where: { id: hydrated.id },
+        data: { source: jobSource },
+      });
+    }
+  }
+
+  return { application: hydrated, jdText: jdText?.trim() || null };
+}

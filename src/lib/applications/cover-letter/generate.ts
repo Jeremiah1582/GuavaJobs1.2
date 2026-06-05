@@ -7,6 +7,7 @@ import { applicationsService } from "../service";
 import { CoverLettersServiceError } from "./errors";
 import type { CoverLetterCitation, CoverLetterDto } from "./types";
 import { upsertLetter } from "./index";
+import { getAtsContextForGeneration } from "../ats/recompute";
 
 export type { CoverLetterCitation };
 
@@ -83,6 +84,14 @@ export async function generateForApplication(
     );
   }
 
+  const atsContext = await getAtsContextForGeneration(userId, applicationId);
+  let resolvedAtsContext = atsContext;
+  if (!resolvedAtsContext) {
+    const { recomputeReport } = await import("../ats/recompute");
+    await recomputeReport(userId, applicationId, "letter.generated");
+    resolvedAtsContext = await getAtsContextForGeneration(userId, applicationId);
+  }
+
   const generated = await generateCoverLetterWithOpenAI({
     jobTitle: application.title,
     company: application.company,
@@ -92,6 +101,7 @@ export async function generateForApplication(
     jobListing: jobListingSnapshot ?? undefined,
     existingLetter: existingLetter?.content ?? null,
     adaptExisting,
+    atsContext: resolvedAtsContext ?? undefined,
   });
 
   const saved = await upsertLetter(

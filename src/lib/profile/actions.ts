@@ -9,8 +9,6 @@ import { getSession } from "@/lib/auth/get-session"
 import { createSupabaseAdmin } from "@/lib/supabase/admin"
 import { isSupabaseBrowserConfigured } from "@/lib/supabase/env"
 
-import { syncFromResume, type SyncMode } from "./sync-from-resume"
-
 export type ProfileActionState = {
   error?: string
   success?: boolean
@@ -150,61 +148,6 @@ export async function updateProfileAction(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save profile"
-    return { error: message }
-  }
-}
-
-export type ProfileCompletenessResult = {
-  percent: number
-  missing: string[]
-}
-
-export async function getProfileCompletenessAction(): Promise<
-  ProfileCompletenessResult | { error: string }
-> {
-  const session = await getSession()
-  if (!session) {
-    return { error: "Not authenticated" }
-  }
-
-  await usersService.ensureUser(session)
-  await profileService.getOrCreateForUser(session.id)
-  const profile = await profileService.getByUserId(session.id)
-  if (!profile) {
-    return { percent: 0, missing: [] }
-  }
-
-  return profile.completeness
-}
-
-export type ApplyResumeToProfileResult = {
-  success?: boolean
-  updated?: boolean
-  error?: string
-}
-
-export async function applyResumeToProfileAction(
-  resumeId: string,
-  mode: SyncMode,
-): Promise<ApplyResumeToProfileResult> {
-  const session = await getSession()
-  if (!session) {
-    return { error: "Not authenticated" }
-  }
-
-  if (!resumeId?.trim()) {
-    return { error: "Resume id is required." }
-  }
-
-  await usersService.ensureUser(session)
-
-  try {
-    const updated = await syncFromResume(session.id, resumeId.trim(), mode)
-    revalidatePath("/dashboard/profile")
-    return { success: true, updated }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to update profile"
     return { error: message }
   }
 }

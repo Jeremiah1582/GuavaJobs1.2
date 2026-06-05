@@ -72,6 +72,7 @@ export const applicationUpdateSchema = z.object({
   interviewLocation: z.string().trim().max(500).optional(),
   interviewUrl: optionalUrl,
   clearRejection: z.boolean().optional(),
+  description: z.string().trim().max(50_000).optional(),
 });
 
 export const applicationNoteSchema = z.object({

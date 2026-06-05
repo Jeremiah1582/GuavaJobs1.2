@@ -3,12 +3,10 @@ import { notFound, redirect } from "next/navigation"
 import { Suspense } from "react"
 import {
   ArrowLeft,
-  Briefcase,
   Building2,
   Calendar,
   DollarSign,
   ExternalLink,
-  FileText,
   MapPin,
   User,
 } from "lucide-react"
@@ -20,11 +18,17 @@ import { getApplicationRowClass } from "@/lib/applications"
 import { profileService } from "@/lib/profile"
 import { usersService } from "@/lib/users"
 
+import { prisma } from "@/db"
+import { getReportForApplication } from "@/lib/applications/ats"
+import { computeApplicationReadiness } from "@/lib/applications/readiness"
+import { ApplicationCoverLetterSection } from "@/components/applications/application-cover-letter-section"
 import { ApplicationCvSection } from "@/components/applications/application-cv-section"
 import { ApplicationGeneratedToast } from "@/components/applications/application-generated-toast"
-import { ApplicationLetterEditor } from "@/components/applications/application-letter-editor"
+import { ApplicationReadinessRing } from "@/components/applications/application-readiness-ring"
+import { TrackedToast } from "@/components/dashboard/tracked-toast"
+import { ApplicationJobDescriptionSection } from "@/components/applications/application-job-description-section"
+import { IcpFitPanel } from "@/components/applications/icp-fit-panel"
 import { ApplicationTaxonomyFields } from "@/components/applications/application-taxonomy-fields"
-import { LetterGroundingPanel } from "@/components/applications/letter-grounding-panel"
 import { ProfileSnapshotCard } from "@/components/applications/profile-snapshot-card"
 import { ApplicationStatusForm } from "@/components/dashboard/application-status-form"
 import { ApplicationNotesPanel } from "@/components/dashboard/application-notes-panel"
@@ -85,10 +89,29 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
   const rowClass = getApplicationRowClass(application.status, application.rejectionPhase)
   const statusColor = getStatusColor(application.status, application.rejectionPhase)
 
+  const [atsReport, resumeLink] = await Promise.all([
+    getReportForApplication(session.id, id),
+    prisma.application.findFirst({
+      where: { id, userId: session.id },
+      select: { resumeId: true },
+    }),
+  ])
+
+  const readiness = computeApplicationReadiness({
+    jobDescription,
+    cvFileUrl: profile?.cvFileUrl ?? null,
+    hasResumeLinked: Boolean(resumeLink?.resumeId),
+    coverLetterContent: letter?.content ?? null,
+    displayName: profile?.displayName ?? null,
+    phone: profile?.phone ?? null,
+    atsReport,
+  })
+
   return (
     <div className="min-h-screen bg-background">
       <Suspense fallback={null}>
         <ApplicationGeneratedToast />
+        <TrackedToast />
       </Suspense>
 
       {/* Hero Header with Status Color */}
@@ -104,19 +127,22 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
             </Button>
           </nav>
 
-          {/* Title Section */}
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
+          {/* Title + readiness */}
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={cn("size-3 rounded-full", statusColor)} aria-hidden />
                 <Badge variant="outline" className="border-current/20 bg-background/50">
                   {formatStatus(application.status, application.rejectionPhase)}
                 </Badge>
+                {application.source && (
+                  <span className="text-xs text-muted-foreground">{application.source}</span>
+                )}
               </div>
-              <h1 className="font-serif text-3xl text-foreground md:text-4xl">
+              <h1 className="font-serif text-2xl text-foreground md:text-3xl">
                 {application.title}
               </h1>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Building2 className="size-4" aria-hidden />
                   {application.company}
@@ -133,62 +159,40 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
                     {application.salaryText}
                   </span>
                 )}
+                {application.appliedAt && (
+                  <span className="text-xs">
+                    Applied{" "}
+                    {application.appliedAt.toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/dashboard/profile">Edit profile</Link>
-              </Button>
-              <ApplicationStatusForm
-                applicationId={application.id}
-                currentStatus={application.status}
-              />
-              {externalLink && (
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[300px] lg:max-w-md">
+              <ApplicationReadinessRing readiness={readiness} compact />
+              <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <a href={externalLink} target="_blank" rel="noopener noreferrer">
-                    View job
-                    <ExternalLink className="ml-1.5 size-3.5" />
-                  </a>
+                  <Link href="/dashboard/profile">Edit profile</Link>
                 </Button>
-              )}
+                <ApplicationStatusForm
+                  applicationId={application.id}
+                  currentStatus={application.status}
+                />
+                {externalLink && (
+                  <Button asChild variant="outline" size="sm">
+                    <a href={externalLink} target="_blank" rel="noopener noreferrer">
+                      View job
+                      <ExternalLink className="ml-1.5 size-3.5" />
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Meta Info */}
-          <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2 md:grid-cols-4">
-            {application.source && (
-              <div className="rounded-lg bg-background/50 p-3">
-                <dt className="text-xs text-muted-foreground">Source</dt>
-                <dd className="mt-1 font-medium">{application.source}</dd>
-              </div>
-            )}
-            {application.appliedAt && (
-              <div className="rounded-lg bg-background/50 p-3">
-                <dt className="text-xs text-muted-foreground">Applied</dt>
-                <dd className="mt-1 font-medium">
-                  {application.appliedAt.toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </dd>
-              </div>
-            )}
-            {application.nextStep && (
-              <div className="rounded-lg bg-background/50 p-3">
-                <dt className="text-xs text-muted-foreground">Next Step</dt>
-                <dd className="mt-1 font-medium">{application.nextStep}</dd>
-              </div>
-            )}
-            {application.contactName && (
-              <div className="rounded-lg bg-background/50 p-3">
-                <dt className="text-xs text-muted-foreground">Contact</dt>
-                <dd className="mt-1 font-medium">{application.contactName}</dd>
-              </div>
-            )}
-          </dl>
         </div>
       </header>
 
@@ -245,65 +249,19 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
               </section>
             )}
 
-            {/* Job Description */}
-            {(jobListingSnapshot || jobDescription) && (
-              <section className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="border-b border-border bg-muted/30 px-5 py-3">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Briefcase className="size-4" />
-                    Job snapshot
-                  </h2>
-                </div>
-                <div className="p-5">
-                  {jobListingSnapshot && (
-                    <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-3">
-                      {jobListingSnapshot.salaryText && (
-                        <div>
-                          <dt className="text-xs text-muted-foreground">Salary</dt>
-                          <dd className="mt-0.5 font-medium">{jobListingSnapshot.salaryText}</dd>
-                        </div>
-                      )}
-                      {jobListingSnapshot.category && (
-                        <div>
-                          <dt className="text-xs text-muted-foreground">Category</dt>
-                          <dd className="mt-0.5 font-medium">{jobListingSnapshot.category}</dd>
-                        </div>
-                      )}
-                      {jobListingSnapshot.contractType && (
-                        <div>
-                          <dt className="text-xs text-muted-foreground">Contract</dt>
-                          <dd className="mt-0.5 font-medium">{jobListingSnapshot.contractType}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  )}
-                  {jobDescription && (
-                    <div className="max-h-96 overflow-y-auto rounded-lg border border-border/50 bg-muted/20 p-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                      {jobDescription}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
+            <ApplicationJobDescriptionSection
+              applicationId={application.id}
+              initialDescription={jobDescription}
+              jobListingSnapshot={jobListingSnapshot}
+            />
 
-            {/* Cover Letter */}
-            <section className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="border-b border-border bg-muted/30 px-5 py-3">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <FileText className="size-4" />
-                  Cover letter
-                </h2>
-              </div>
-              <div className="p-5">
-                <ApplicationLetterEditor
-                  applicationId={application.id}
-                  company={application.company}
-                  initialLetter={letter}
-                  isAiAssisted={bundle.flags.isAiAssisted}
-                />
-                <LetterGroundingPanel citations={letter?.citations ?? []} />
-              </div>
-            </section>
+            <ApplicationCoverLetterSection
+              applicationId={application.id}
+              company={application.company}
+              initialLetter={letter}
+              isAiAssisted={bundle.flags.isAiAssisted}
+              hasJobDescription={Boolean(jobDescription?.trim())}
+            />
 
             {/* CV / Resume Section */}
             <section className="overflow-hidden rounded-xl border border-border bg-card">
@@ -321,6 +279,11 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
 
           {/* Right Sidebar */}
           <div className="space-y-6">
+            <IcpFitPanel
+              applicationId={application.id}
+              hasJobDescription={Boolean(jobDescription?.trim())}
+            />
+
             <ProfileSnapshotCard
               applicationId={application.id}
               snapshot={profileSnapshot}

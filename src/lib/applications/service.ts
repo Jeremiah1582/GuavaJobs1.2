@@ -15,6 +15,7 @@ import {
   buildJobListingSnapshotFromListing,
   jobSnapshotPersistPayload,
   parseJobListingSnapshot,
+  resolveJobDescriptionForApplication,
   resolveJobDescriptionText,
 } from "./snapshots";
 import { ApiErrorCode } from "../api/errors";
@@ -31,6 +32,7 @@ import {
   type ManualApplicationCreateInput,
 } from "../validators/applications";
 import { ApplicationsServiceError } from "./errors";
+import { safeRecomputeReport } from "./ats/hooks";
 import "server-only";
 
 import { previewCoverLetterContent } from "./cover-letter";
@@ -56,6 +58,15 @@ import type {
   ApplicationProfileSnapshotDto,
   JobListingSnapshot,
 } from "./types";
+
+export async function latestActiveResumeId(userId: string): Promise<string | null> {
+  const resume = await prisma.resume.findFirst({
+    where: { userId, isActive: 1 },
+    orderBy: { uploadedAt: "desc" },
+    select: { id: true },
+  });
+  return resume?.id ?? null;
+}
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -266,6 +277,7 @@ export async function createFromJobListing(
   if (existing) {
     const hydrated = await ensureJobSnapshotsPersisted(existing);
     await captureProfileSnapshot(hydrated.id, userId);
+    await safeRecomputeReport(userId, hydrated.id, "application.created");
     return hydrated;
   }
 
@@ -275,6 +287,7 @@ export async function createFromJobListing(
   const snapshotFields = jobSnapshotPersistPayload(listingSnapshot, descriptionText);
   const jobCategory = inferJobCategoryFromListing(listingSnapshot);
   const employmentType = inferEmploymentTypeFromListing(listingSnapshot);
+  const resumeId = await latestActiveResumeId(userId);
 
   try {
     const created = await prisma.application.create({
@@ -285,15 +298,18 @@ export async function createFromJobListing(
         company: job.company,
         location: job.location || null,
         jobUrl: job.redirectUrl || null,
+        source: job.source,
         status: "DRAFT",
         jobCategory,
         employmentType,
         jobCategoryOther:
           jobCategory === "OTHER" ? listingSnapshot.category?.trim() || null : null,
+        resumeId,
         ...snapshotFields,
       },
     });
     await captureProfileSnapshot(created.id, userId);
+    await safeRecomputeReport(userId, created.id, "application.created");
     return created;
   } catch (error) {
     if (isUniqueConstraintError(error)) {
@@ -301,6 +317,7 @@ export async function createFromJobListing(
       if (duplicate) {
         const hydrated = await ensureJobSnapshotsPersisted(duplicate);
         await captureProfileSnapshot(hydrated.id, userId);
+        await safeRecomputeReport(userId, hydrated.id, "application.created");
         return hydrated;
       }
     }
@@ -328,6 +345,8 @@ export async function createManual(
     capturedAt: new Date().toISOString(),
   };
 
+  const resumeId = await latestActiveResumeId(userId);
+
   const created = await prisma.application.create({
     data: {
       userId,
@@ -340,10 +359,12 @@ export async function createManual(
       status: parsed.appliedAt ? "APPLIED" : "DRAFT",
       jobCategory: "UNKNOWN",
       employmentType: "UNKNOWN",
+      resumeId,
       ...jobSnapshotPersistPayload(listingSnapshot, descriptionText),
     },
   });
   await captureProfileSnapshot(created.id, userId);
+  await safeRecomputeReport(userId, created.id, "application.created");
   return created;
 }
 
@@ -475,13 +496,14 @@ export async function getBundleForUser(
     );
   }
 
-  const hydrated = await ensureJobSnapshotsPersisted(application);
+  const snapshotted = await ensureJobSnapshotsPersisted(application);
+  const { application: hydrated, jdText: jobDescriptionText } =
+    await resolveJobDescriptionForApplication(userId, snapshotted);
   const profileSnapshot = application.profileSnapshot
     ? mapProfileSnapshot(application.profileSnapshot)
     : await ensureProfileSnapshotForApplication(applicationId, userId);
 
   const jobListingSnapshot = resolveJobListingSnapshotForRead(hydrated);
-  const jobDescriptionText = resolveJobDescriptionText(hydrated);
   const letterRow = application.coverLetter ?? null;
 
   return {
@@ -562,11 +584,24 @@ export async function update(
     data.interviewLocation = parsed.interviewLocation?.trim() || null;
   }
   if (parsed.interviewUrl !== undefined) data.interviewUrl = parsed.interviewUrl?.trim() || null;
+  let descriptionChanged = false;
+  if (parsed.description !== undefined) {
+    const text = parsed.description?.trim() || null;
+    const snapshot =
+      parseJobListingSnapshot(existing.jobListingSnapshot) ??
+      buildJobListingSnapshotFromApplication(existing);
+    Object.assign(data, jobSnapshotPersistPayload(snapshot, text));
+    descriptionChanged = text !== resolveJobDescriptionText(existing);
+  }
 
   await prisma.application.update({
     where: { id: applicationId },
     data,
   });
+
+  if (descriptionChanged) {
+    await safeRecomputeReport(userId, applicationId, "manual.refresh");
+  }
 
   return getByIdForUser(userId, applicationId);
 }
@@ -778,6 +813,7 @@ export async function setApplicationResume(
     where: { id: applicationId },
     data: { resumeId },
   });
+  await safeRecomputeReport(userId, applicationId, "resume.linked");
 }
 
 export const applicationsService = {

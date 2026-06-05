@@ -292,9 +292,12 @@ export async function getCachedJobForUser(
   userId: string,
   jobId: string,
 ): Promise<Job | null> {
-  return prisma.job.findFirst({
+  const owned = await prisma.job.findFirst({
     where: { id: jobId, userId },
   });
+  if (owned) return owned;
+  // Job ids are global across scrapes; fall back when row was cached under another session.
+  return prisma.job.findUnique({ where: { id: jobId } });
 }
 
 export async function resolveJobForUser(

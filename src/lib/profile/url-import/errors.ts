@@ -9,7 +9,9 @@ export class ProfileUrlImportError extends Error {
       | "AI_PARSE_FAILED"
       | "AI_UNAVAILABLE"
       | "AI_CONFIG_ERROR"
-      | "TIMEOUT",
+      | "TIMEOUT"
+      | "INVALID_REQUEST"
+      | "NOT_FOUND",
     public readonly status: number = 400,
     public readonly userMessage?: string,
   ) {

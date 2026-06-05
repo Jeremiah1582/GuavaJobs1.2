@@ -1,4 +1,4 @@
-created_date: 2026-06-03 12:00:00, updated_at: 2026-06-04 22:30:00
+created_date: 2026-06-03 12:00:00, updated_at: 2026-06-05 22:30:00
 
 # InternHunt — Master Build Plan
 
@@ -27,7 +27,7 @@ When a wave includes a **How to implement** block, follow it before inventing ne
 | **Route Handlers** | External/legacy JSON APIs (`/api/jobs`, `/api/resume`) or streaming |
 | **No new packages** | Unless the plan explicitly says so |
 
-Full Wave 2 execution detail: [`.cursor/plans/wave_2_profile_cv_bridge.plan.md`](../.cursor/plans/wave_2_profile_cv_bridge.plan.md) (create/update when planning W2).
+Wave plans: [W2](../.cursor/plans/wave_2_profile_cv_bridge.plan.md) · [W2B](../.cursor/plans/wave_2b_profile_import_refactor.plan.md) ✅ · **[W3 + Application ATS](../.cursor/plans/wave_3_application_backend.plan.md)** (current)
 
 ### 1.2 Critical path (what blocks what)
 
@@ -43,10 +43,13 @@ Wave 0D API helpers          ─┘         │
                                         │
                     ┌───────────────────┼───────────────────┐
                     ▼                   ▼                   ▼
-              Wave 2 Profile    Wave 3 App backend   (parallel after 1)
+              Wave 2 Profile ──► Wave 2B Import refactor
                     │                   │
                     │                   ▼
-                    │             Wave 4 Hub UI (Milestone C)
+              Wave 3 App backend   (after 2B)
+                    │
+                    ▼
+              Wave 4 Hub UI (Milestone C)
                     └─────────┬─────────┘
                               ▼
                         Wave 5 Cover AI + remove /dashboard/cover
@@ -78,10 +81,12 @@ Wave 0D API helpers          ─┘         │
 | `getSession` | Ready | `src/lib/auth/get-session.ts` → `auth.getUser()` |
 | Application hub | **Auth-gated** | Pages redirect to `/sign-in`; APIs return 401 when signed out |
 | Profile page | **Ready** | `dashboard/profile/page.tsx` — RSC, completeness bar, ProfileForm, CV upload |
-| Resume → profile | **Ready** | `sync-from-resume.ts`, `applyResumeToProfileAction`, resume page merge/overwrite dialog |
+| Profile import | **Ready** | URL import unchanged; `CvProfileImport` uses uploaded CV + optional latest resume scan (preview → Apply) |
+| ATS resume analyzer | **Ready** | `/dashboard/resume` — CV document scoring only |
+| Application ATS / ICP fit | **Ready (W3B)** | Match-first `IcpFitPanel` on detail; shared `JobDescriptionInsight`; JD backfill from `Job` cache; `ApplicationJobDescriptionSection` |
 | Storage | **Partial** | `cv-uploads` via `storage:ensure` + service-role upload; `resumes` bucket deferred |
 
-**Next:** **Wave 3** (application backend — Milestone B). Wave 2 complete.
+**Next:** **Wave 4** (Application Hub UI — Milestone C) after manual W3/W3B QA. Wave 3 + 3B implementation complete.
 
 ### 1.4 Locked decisions (do not re-litigate)
 
@@ -278,8 +283,8 @@ See also: [`docs/SUPABASE_AUTH_SETUP.md`](./SUPABASE_AUTH_SETUP.md), `npm run ve
 | W2.2 | Fix `src/lib/profile/actions.ts` imports (`profileService`, supabase server) | | ✅ Wired (admin upload + `getSession`) |
 | W2.3 | Create Supabase buckets `cv-uploads` (+ policies or service-role server upload) | Dashboard | ✅ `cv-uploads` via `storage:ensure`; `resumes` bucket deferred |
 | W2.4 | CV upload path in profile actions uses Storage or documents fallback | | ✅ `uploadCvAction` + profile UI; manual browser QA recommended |
-| W2.5 | `src/lib/profile/sync-from-resume.ts` — map resume parse → profile | | ✅ `syncFromResume` + `applyResumeToProfileAction` |
-| W2.6 | Resume page/API: after scan, prompt Apply / Confirm overwrite if 100% | `dashboard/resume` | ✅ Auto-merge &lt;100%; AlertDialog at 100% |
+| W2.5 | `sync-from-resume.ts` — map resume → profile | | 🔄 **Superseded by 2B** — keep mapper for import API only |
+| W2.6 | Resume scan → profile merge/overwrite | `dashboard/resume` | ❌ **Removed in 2B** — ATS stays separate |
 
 #### How to implement — W2.1 (profile page)
 
@@ -298,63 +303,182 @@ See also: [`docs/SUPABASE_AUTH_SETUP.md`](./SUPABASE_AUTH_SETUP.md), `npm run ve
 - **W2.3:** Run `npm run storage:ensure` (creates private `cv-uploads`). Defer `resumes` bucket until resume files move off disk (InternHunt still uses `RESUMES_DIR` / local path in upload route).
 - **W2.4:** [`uploadCvAction`](../../src/lib/profile/actions.ts) already uploads via **service role** to `{session.id}/{timestamp}.ext` and sets `Profile.cvFileUrl`. After W2.1, test from profile form file input; surface bucket errors (already human-readable).
 
-#### How to implement — W2.5 (sync resume → profile)
-
-1. Add [`src/lib/profile/sync-from-resume.ts`](../../src/lib/profile/sync-from-resume.ts) (server-only):
-   - Load active `Resume` for `userId` (or by `resumeId`)
-   - Parse JSON columns: `skills`, `experience`, `education`, `summary`
-   - Build `ProfileUpdateInput` (map structured experience to `ExperienceEntry[]` — align with upload route’s `structured.experience` shape)
-   - **`merge` mode:** only fill empty/null profile fields (default when completeness &lt; 100%)
-   - **`overwrite` mode:** replace summary, skills, experience, education when user confirms
-2. Add server action `applyResumeToProfileAction(resumeId, mode)` in [`actions.ts`](../../src/lib/profile/actions.ts): session check → `syncFromResume` → `profileService.update` → `revalidatePath("/dashboard/profile")`
-
-#### How to implement — W2.6 (resume scan → profile)
-
-Per [`NOTES.md`](../NOTES.md): pre-fill with minimum effort; **if profile is 100% complete**, ask before overwriting.
-
-1. In [`dashboard/resume/page.tsx`](../../src/app/dashboard/resume/page.tsx) after successful `/api/resume/upload` response:
-   - Call new server action or lightweight `GET` that returns `profileService.getByUserId` completeness **or** pass `completeness.percent` from a follow-up fetch
-2. **If `completeness.percent < 100`:** call `applyResumeToProfileAction(resumeId, "merge")` + toast “Profile updated from your scan” + link to `/dashboard/profile`
-3. **If `completeness.percent === 100`:** show `AlertDialog`: “Profile is complete. Replace with data from this scan?” → Confirm runs `overwrite`, Cancel skips
-4. Do **not** block ATS UI on profile sync failure; log and toast error only
-
-**Verify W2**
+**Verify W2 (baseline — done)**
 
 - [x] `npm run build` + `npx tsc --noEmit` pass  
 - [x] Profile page RSC + actions wired (`/dashboard/profile`)  
 - [x] `cv-uploads` bucket confirmed (`npm run storage:ensure`)  
-- [ ] Edit profile saves to Postgres (manual: sign in → save → reload)  
-- [ ] CV upload succeeds from profile form (manual)  
-- [ ] Scan → profile merge / overwrite dialog (manual on `/dashboard/resume`)  
+- [x] Edit profile saves to Postgres (manual)  
+- [x] CV upload succeeds from profile form (manual)  
+- [x] ~~Scan → profile merge~~ — **replaced by Wave 2B** (see below)
 
 ---
 
-### Wave 3 — Application backend (**Milestone B**)
+### Wave 2B — Profile import refactor ✅ **Complete**
 
-**Prereqs:** Wave 1 (Wave 2 parallel OK but letter needs profile).
+**Prereqs:** Wave 2 baseline ✅  
+**Detailed plan:** [wave_2b_profile_import_refactor.plan.md](../.cursor/plans/wave_2b_profile_import_refactor.plan.md)
 
-| ID | Task | Files |
-|----|------|-------|
-| W3.1 | Confirm `applicationsService` methods on Postgres | `src/lib/applications/service.ts` |
-| W3.2 | Wire `src/app/api/applications/**` (6 routes) | session + service |
-| W3.3 | `track-job.ts`: resolve job via `jobs-api.ts` / `Job` table | not core jobsService |
-| W3.4 | Jobs UI: **Track application** button → server action → redirect to application detail | `dashboard/jobs/page.tsx` |
-| W3.5 | `create-manual.ts` + `new/page.tsx` end-to-end | |
-| W3.6 | On track/create: optional `resumeId` from latest Resume | |
-| W3.7 | Generate letter: create `ApplicationCoverLetter`, set `coverLetterId` | `generate-cover-letter.ts` |
-| W3.8 | Dashboard `?tracked=1` + `TrackedToast` | |
+**Product decision:** ATS analyzer and profile pre-fill are **separate**. URL import ([`url-import.tsx`](../../src/components/profile/url-import.tsx)) is unchanged. CV pre-fill uses the **existing CV upload** + [`CvProfileImport`](../../src/components/profile/cv-profile-import.tsx) (“Use uploaded CV” / “Use latest resume scan”) — preview → Apply → Save.
+
+| ID | Task | Files | Status |
+|----|------|-------|--------|
+| W2B.1 | Remove ATS scan → profile merge/overwrite on resume page | `dashboard/resume/page.tsx` | ✅ |
+| W2B.2 | Remove `applyResumeToProfileAction` + `sync-from-resume.ts` | `lib/profile/actions.ts`, `lib/profile/cv-import/*` | ✅ |
+| W2B.3 | `POST /api/profile/parse-resume` (`profileCv` \| `resume`) → preview DTO | `api/profile/parse-resume` | ✅ |
+| W2B.4 | `CvProfileImport` — no changes to URL import; no extra file picker | `cv-profile-import.tsx`, `profile-form.tsx` | ✅ |
+| W2B.5 | Docs + build | `NOTES.md`, this file | ✅ |
+
+#### How to implement — W2B (summary)
+
+1. **Strip** post-upload profile sync from [`resume/page.tsx`](../../src/app/dashboard/resume/page.tsx).
+2. **Add** [`parse-resume/route.ts`](../../src/app/api/profile/parse-resume/route.ts): `{ source: "profileCv" }` downloads `cv-uploads`; `{ source: "resume" }` maps latest active `Resume` row; CV path uses LLM via [`cv-import/extract.ts`](../../src/lib/profile/cv-import/extract.ts).
+3. **Do not** change [`url-import.tsx`](../../src/components/profile/url-import.tsx).
+4. **Add** [`cv-profile-import.tsx`](../../src/components/profile/cv-profile-import.tsx) below URL import; reuse `handleUrlImport`.
+5. User uploads CV in existing **CV File** section → **Use uploaded CV** → Apply → Save.
+
+**Verify W2B**
+
+- [x] `npm run build` + `npx tsc --noEmit`  
+- [ ] Resume scan does not mutate profile (manual)  
+- [ ] Upload CV → Use uploaded CV → Apply → Save (manual)  
+- [ ] Use latest resume scan → Apply (manual, if ATS scan exists)
+
+---
+
+### Wave 3 — Application backend + Application ATS (**Milestone B**) ✅ **Implemented — manual QA pending**
+
+**Prereqs:** Wave 1 ✅, Wave 2B ✅  
+**Detailed plan:** [wave_3_application_backend.plan.md](../.cursor/plans/wave_3_application_backend.plan.md)
+
+**Two ATS systems (do not merge):** Resume ATS = CV document on `/dashboard/resume` (unchanged). **Application ATS** = per-job keyword fit on the application hub (letter + CV vs job description).
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W3.1 | Confirm `applicationsService` on Postgres | Done | `src/lib/applications/service.ts` |
+| W3.2 | Wire `api/applications/**` (6 routes) | Done | session + service; cover-letters POST AI + save branches |
+| W3.3 | `track-job.ts` + job resolve | Done | `track-job.ts` → returns id; redirect to detail `?tracked=1` |
+| W3.4 | Jobs UI **Track application** | Done | `dashboard/jobs/page.tsx`, `track-job-button.tsx` |
+| W3.5 | Manual create E2E + redirect to detail | Done | `create-manual.ts`, `applications/new` |
+| W3.6 | Auto `resumeId` on track/create | Done | `service.ts` — `latestActiveResumeId` |
+| W3.7 | Generate letter + `coverLetterId` | Done | `cover-letter/generate.ts`, POST `cover-letters` |
+| W3.8 | `?tracked=1` + `TrackedToast` on applications routes | Done | list + detail pages |
+| W3.9 | `ApplicationAtsReport` schema + migration | Done | `prisma/schema.prisma`, migration applied |
+| W3.10 | `application-ats` service (analyze JD, score letter/CV) | Done | `src/lib/applications/ats/`, `src/lib/ats/keyword-match.ts` |
+| W3.11 | Recompute hooks + cover-letter prompt enrichment | Done | `ats/hooks.ts`, `cover-letter-prompt.ts` |
+| W3.12 | ATS API + `ApplicationAtsPanel` on detail | Done | `api/applications/[id]/ats`, `application-ats-panel.tsx` |
+
+#### How to implement — W3.1 / W3.2 (service + APIs)
+
+**Already partially wired** — [`applications/route.ts`](../../src/app/api/applications/route.ts) uses `getSession` + `applicationsService`. Audit all six routes the same way:
+
+| Route | Methods | Service calls |
+|-------|---------|---------------|
+| `api/applications` | GET list, POST manual create | `listByUser`, `createManual`, `getByIdForUser` |
+| `api/applications/[id]` | GET, PATCH, DELETE | `getByIdForUser`, `update`, `delete` |
+| `api/applications/[id]/notes` | GET, POST | notes CRUD on bundle |
+| `api/applications/[id]/notes/[noteId]` | PATCH, DELETE | |
+| `api/applications/[id]/cover-letters` | GET, POST generate | `generate-cover-letter` flow |
+| `api/applications/[id]/cover-letters/[letterId]` | GET, PATCH | letter edit + `isUserEdited` later (W5) |
+
+Pattern: `getSession()` → 401 → `usersService.ensureUser(session)` → `applicationsService.*(session.id, …)` → `jsonSuccess` / `handleServiceError`. No `@guavajobs/core`.
+
+Dashboard pages already call `applicationsService` directly (RSC); APIs exist for client components (`ApplicationLetterEditor`, notes panel).
+
+#### How to implement — W3.3 / W3.4 (track job from listings)
+
+1. [`track-job.ts`](../../src/lib/applications/track-job.ts): `jobsService.resolveListing(session.id, jobId)` → `applicationsService.createFromJobListing(session.id, job)` → redirect.
+2. Confirm `resolveListing` reads from ported [`jobs-api.ts`](../../src/lib/jobs/) / `Job` table (not deleted core).
+3. On [`dashboard/jobs/page.tsx`](../../src/app/dashboard/jobs/page.tsx): add **Track application** per row — `<form action={trackJobAction}>` with hidden `jobId` or `trackJobById` from a Server Action button.
+4. After track: redirect to `/dashboard/applications/[id]` (update `trackJobAction` if it still lands on `?tracked=1` only).
+
+#### How to implement — W3.5 (manual application)
+
+1. [`create-manual.ts`](../../src/lib/applications/create-manual.ts) server action: validate with `manualApplicationCreateSchema`, `applicationsService.createManual`.
+2. [`dashboard/applications/new/page.tsx`](../../src/app/dashboard/applications/new/page.tsx): form → action → redirect to detail.
+3. Snapshot job fields on create via existing `buildManualSnapshot` in service.
+
+#### How to implement — W3.6 / W3.7 (resume + cover letter)
+
+1. **W3.6:** In `createFromJobListing` / `createManual`, if `resumeId` omitted, set `resumeId` to latest `Resume` for user (`prisma.resume.findFirst` orderBy `updatedAt desc`).
+2. **W3.7:** [`generate-cover-letter.ts`](../../src/lib/applications/generate-cover-letter.ts):
+   - Load application bundle + `profileService` snapshot (or `ApplicationProfileSnapshot`)
+   - Call [`cover-letter/generate.ts`](../../src/lib/applications/cover-letter/generate.ts) with job description + profile context
+   - Persist `ApplicationCoverLetter`, set `application.coverLetterId`
+   - `revalidatePath` for application detail
+3. Wire **Generate** button in `ApplicationLetterEditor` to server action or POST `cover-letters` route (match existing component props).
+
+#### How to implement — W3.8 (tracked toast)
+
+1. [`TrackedToast`](../../src/components/dashboard/tracked-toast.tsx) on applications **list and detail**.
+2. Redirects: `/dashboard/applications/[id]?tracked=1` (not `/dashboard?tracked=1`).
+
+#### How to implement — W3.9–W3.12 (Application ATS)
+
+**Goal:** Job-specific keyword analysis and application strength (0–100) for cover letter + CV, updated when letter or CV changes. Does **not** replace resume ATS.
+
+1. **W3.9 — Schema:** Add `ApplicationAtsReport` (1:1 `Application`): `overallScore`, `letterScore`, `cvScore`, `keywordsJson`, `letterMatchJson`, `cvMatchJson`, `requirementsJson`, `tipsJson`, `inputFingerprint`, `analyzedAt`.
+2. **W3.10 — Service** [`src/lib/applications/ats/`](../../src/lib/applications/ats/):
+   - `analyzeJobRequirements(jobDescriptionText)` — LLM extract required/preferred keywords (cached on report).
+   - `scoreKeywordMatch` — shared util with resume ATS (`src/lib/ats/keyword-match.ts`).
+   - `recomputeReport(userId, applicationId)` — score letter text + CV text (`Resume.rawText` or profile snapshot fallback); weighted overall.
+3. **W3.11 — Hooks (non-blocking):** After `createFromJobListing` / `createManual`, `generateForApplication`, `upsertLetter` / `updateLetter`, resume link — call `recomputeReport` in try/catch. Pass top missing keywords into [`cover-letter-prompt.ts`](../../src/lib/ai/cover-letter-prompt.ts) when generating.
+4. **W3.12 — UI/API:** `GET|POST /api/applications/[id]/ats`; [`ApplicationAtsPanel`](../../src/components/applications/application-ats-panel.tsx) on detail — overall score, letter/CV breakdown, present/missing keyword chips, tips, Refresh button.
+
+**End UX:** User tracks a job → opens application → sees fit % and missing JD keywords → generates letter (AI targets gaps) → scores refresh on save.
 
 **Verify W3 (Milestone B)**
 
-- [ ] Track job → appears in `/dashboard/applications`  
-- [ ] Status + note persist  
-- [ ] Generate letter sets `coverLetterId` with profile+job content  
+- [ ] Track job → `/dashboard/applications/[id]?tracked=1` (manual QA)
+- [ ] Manual create → detail with `?tracked=1` (manual QA)
+- [ ] Status + note persist (manual QA)
+- [ ] Generate letter sets `coverLetterId` with profile+job content (manual QA)
+- [ ] Application ATS report on detail; updates after letter edit/generate (manual QA)
+- [ ] Resume ATS page unchanged (manual QA)
+- [x] `npx tsc --noEmit` + `npm run build`
+
+---
+
+### Wave 3B — Ideal Candidate Profile (ICP) Fit ✅ **Implemented — manual QA pending**
+
+**Prereqs:** Wave 3 ✅  
+**Detailed plan:** [wave_3b_job_description_insights.plan.md](../.cursor/plans/wave_3b_job_description_insights.plan.md)
+
+**Goal:** Extract the job lister's **Ideal Candidate Profile (ICP)** from job descriptions (shared cache), score how well the user's profile matches per dimension with **traffic-light** colours, and surface both on the application hub. Resume ATS on `/dashboard/resume` is unchanged.
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W3B.1 | `resolveJobDescriptionForApplication` + JD backfill from Job table; recompute API 422/502 | Done | `snapshots.ts`, `ats/recompute/route.ts` |
+| W3B.2 | `JobDescriptionInsight` model + `Application.jobInsightId`; `ApplicationAtsReport.icpMatchJson` | Done | `prisma/schema.prisma`, migration |
+| W3B.3 | `job-insights/` module — ICP Zod, LLM extract, `getOrCreateJobInsight` cache | Done | `src/lib/applications/job-insights/` |
+| W3B.4 | `matchIcpToProfile` + blended score (60% ICP / 40% docs); extended `ApplicationAtsReportDto` | Done | `match-icp.ts`, `ats/recompute.ts`, `ats/types.ts` |
+| W3B.5 | PATCH `description` on application + empty-state paste JD UI | Done | `validators/applications.ts`, `service.ts`, `icp-fit-panel.tsx` |
+| W3B.6 | `IcpFitPanel` — traffic-light hero, Ideal candidate / Your fit tabs | Done | `icp-fit-panel.tsx`, `applications/[id]/page.tsx` |
+| W3B.7 | Cover letter prompt enriched with ICP gaps + themes | Done | `cover-letter-prompt.ts`, `getAtsGenerationContext` |
+| W3B.8 | MASTER_BUILD_PLAN Wave 3B section | Done | this file |
+| W3B.9 | JD hardening: global `Job` cache fallback, `source` on track, always-visible JD section, match-first panel | Done | `jobs-api.ts`, `service.ts`, `application-job-description-section.tsx`, `icp-fit-panel.tsx` |
+
+**UX (match-first):** Hero = overall % + traffic-light status + “What to improve” tips. Tabs: **Your match** (dimension scores) then **What they want** (shared ICP). Document keyword channels collapsed by default. Job description always shown in main column with paste/edit when missing.
+
+**JD resolution:** `getBundleForUser` → `resolveJobDescriptionForApplication` backfills from `resolveJobForUser` (user cache → global `Job` row → `savedJob` snapshot), persists text + `source`, then ICP analysis runs.
+
+**Verify W3B**
+
+- [ ] Tracked application shows job description in main column without manual paste (manual QA)
+- [ ] Application detail shows green/amber/red match hero after analysis (manual QA)
+- [ ] Dimension rows update after profile snapshot refresh + recompute (manual QA)
+- [ ] Shared ICP: second user on same `jobExternalId` skips LLM extraction (manual QA)
+- [ ] Red skills dimension when 0 must-haves match (manual QA)
+- [ ] Cover letter generation references top ICP gaps (manual QA)
+- [ ] Resume ATS page unchanged (manual QA)
+- [ ] `npx prisma migrate deploy` on target DB
+- [x] `npx tsc --noEmit`
 
 ---
 
 ### Wave 4 — Application Hub UI (**Milestone C**)
 
-**Prereqs:** Wave 3.
+**Prereqs:** Wave 3 verify passes (track + generate letter work).
 
 | ID | Task | Files |
 |----|------|-------|
@@ -364,6 +488,48 @@ Per [`NOTES.md`](../NOTES.md): pre-fill with minimum effort; **if profile is 100
 | W4.4 | Application detail: wire all components from §5.3 | `[id]/page.tsx` |
 | W4.5 | Remove duplicate nav from old dashboard page if any | |
 | W4.6 | Guava tokens on primary buttons (`bg-guava-pink-gradient`) | |
+
+#### How to implement — W4.1 (dashboard shell)
+
+1. **Create** [`src/app/dashboard/layout.tsx`](../../src/app/dashboard/layout.tsx) if missing — wrap all `/dashboard/*` routes.
+2. Reuse sidebar from [`dashboard/page.tsx`](../../src/app/dashboard/page.tsx) or extract `DashboardSidebar` (already has `SignOutButton` from Wave 1).
+3. Nav links (Next `<Link>`): Overview `/dashboard`, Resume `/dashboard/resume`, Profile `/dashboard/profile`, Jobs `/dashboard/jobs`, Applications `/dashboard/applications`, Chat `/dashboard/chat`.
+4. **Remove** link to `/dashboard/cover` (Wave 5 deletes route).
+5. Active state: `usePathname()` in client subcomponent or `pathname` segment in server layout.
+
+#### How to implement — W4.2 (overview)
+
+1. Slim [`dashboard/page.tsx`](../../src/app/dashboard/page.tsx): fetch `applicationsService.listByUser` + profile completeness for stats cards.
+2. Render **minimized** [`ApplicationTracker`](../../src/components/dashboard/application-tracker.tsx) (recent 3–5 apps) with link to full list.
+3. Keep marketing hero minimal — hub lives on Applications.
+
+#### How to implement — W4.3 (applications list)
+
+1. [`applications/page.tsx`](../../src/app/dashboard/applications/page.tsx) already has table + empty state — add **full** `ApplicationTracker` pipeline strip above table if not present.
+2. Ensure [`ApplicationsTable`](../../src/components/applications/applications-table.tsx) uses [`row-styles.ts`](../../src/lib/applications/row-styles.ts) for status colours.
+3. Primary CTA: **New application** → `/dashboard/applications/new`.
+
+#### How to implement — W4.4 (application detail)
+
+Load bundle in [`applications/[id]/page.tsx`](../../src/app/dashboard/applications/[id]/page.tsx) with `applicationsService.getByIdForUser` and mount §5.3 components:
+
+| Component | Responsibility |
+|-----------|----------------|
+| `application-status-form` | Status dropdown → server action / PATCH |
+| `application-notes-panel` | Notes list + add |
+| `application-taxonomy-fields` | Category / employment type |
+| `application-cv-section` | Linked resume + upload hint |
+| `application-letter-editor` | Generate + edit cover letter (W3.7) |
+| `letter-grounding-panel` | Show job + profile snippets used |
+| `profile-snapshot-card` | Frozen profile at apply time |
+| `application-generated-toast` | Post-generate feedback |
+
+Pass `applicationId` and DTO slices as props; prefer Server Actions in `lib/applications/actions.ts` over new API routes for mutations.
+
+#### How to implement — W4.5 / W4.6 (polish)
+
+1. **W4.5:** Delete duplicate nav blocks from child pages once layout owns sidebar.
+2. **W4.6:** Primary actions use `bg-guava-pink-gradient text-accent-foreground` per [`guava-tokens.css`](../../src/styles/guava-tokens.css); check dark mode.
 
 **Verify W4 (Milestone C)**
 
@@ -488,7 +654,8 @@ model Application {
 |-------|----------|
 | Profile CV | Bucket `cv-uploads`; server upload via **service role** or user-scoped server client; path `{userId}/...` in `Profile.cvFileUrl` |
 | Resume PDF | Bucket `resumes` or local `RESUMES_DIR` until bucket ready |
-| URL import | HTTP fetch in API route only — no bucket |
+| URL import | HTTP fetch in `/api/profile/parse-url` — no bucket |
+| Profile resume import (2B) | `/api/profile/parse-resume` — file, `resumeId`, or download `cv-uploads` via `cvFileUrl` — preview only until user saves profile |
 
 `cv-uploads` created via `npm run storage:ensure` (service-role upload; path `{userId}/...`). `resumes` Supabase bucket deferred — resume PDFs still use local `RESUMES_DIR` in `/api/resume/upload`. `src/lib/profile/actions.ts` expects bucket name `cv-uploads`.
 
@@ -537,11 +704,11 @@ model Application {
 
 ## 11. Agent handoff (next session)
 
-**Start here:** Wave **3** — application backend (Milestone B): **W3.1**–**W3.8**.
+**Start here:** Wave **4** — Application Hub UI (Milestone C) after manual W3 QA.
 
-**Completed:** Waves **0–2** (Postgres, Supabase Auth, profile + CV bridge).
+**Completed:** Waves **0–2**, **2B**, **3** (track/create/generate loop + Application ATS).
 
-**Do not start:** Wave 4 UI until Wave 3 verify passes.
+**Do not start:** Wave 4 UI until Wave 3 manual verify passes.
 
 **Quick status commands**
 
@@ -554,4 +721,4 @@ npm run build
 
 ---
 
-*Updated 2026-06-04: Waves 0–2 complete; start Wave 3 (application backend).*
+*Updated 2026-06-05: Wave 3B ICP fit implemented; manual QA then Wave 4.*

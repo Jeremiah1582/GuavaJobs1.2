@@ -82,6 +82,16 @@ function formatEducation(educationJson: unknown): string {
     .join("\n");
 }
 
+export type CoverLetterAtsContext = {
+  missingKeywords: string[];
+  requiredKeywords: string[];
+  summaryRequirements: string;
+  topGaps?: string[];
+  cvEmphasis?: string[];
+  coverLetterThemes?: string[];
+  mustHaveSkillsMissing?: string[];
+};
+
 export function buildCoverLetterUserPrompt(input: {
   jobListing: JobListingSnapshot;
   jobDescriptionText: string;
@@ -89,6 +99,7 @@ export function buildCoverLetterUserPrompt(input: {
   candidateDisplayName: string;
   existingLetter?: string | null;
   adaptExisting?: boolean;
+  atsContext?: CoverLetterAtsContext;
 }): string {
   const {
     jobListing,
@@ -97,6 +108,7 @@ export function buildCoverLetterUserPrompt(input: {
     candidateDisplayName,
     existingLetter,
     adaptExisting,
+    atsContext,
   } = input;
 
   const name = candidateDisplayName.trim();
@@ -120,6 +132,23 @@ export function buildCoverLetterUserPrompt(input: {
       ? `\n\nExisting cover letter (adapt and improve — keep accurate facts, improve clarity and fit):\n${existingLetter.trim()}`
       : "";
 
+  const hasAtsContext =
+    atsContext &&
+    (atsContext.missingKeywords.length > 0 ||
+      atsContext.requiredKeywords.length > 0 ||
+      (atsContext.topGaps?.length ?? 0) > 0 ||
+      (atsContext.mustHaveSkillsMissing?.length ?? 0) > 0);
+
+  const atsBlock = hasAtsContext
+    ? `\n\nICP fit targeting (weave naturally where truthful — never invent experience):
+Required terms to reflect: ${atsContext!.requiredKeywords.slice(0, 10).join(", ") || "n/a"}
+Priority ICP gaps to close (only if profile has evidence): ${(atsContext!.topGaps ?? atsContext!.missingKeywords).slice(0, 5).join(", ") || "n/a"}
+Must-have skills missing from profile: ${(atsContext!.mustHaveSkillsMissing ?? []).slice(0, 5).join(", ") || "n/a"}
+CV emphasis the lister expects: ${(atsContext!.cvEmphasis ?? []).slice(0, 4).join("; ") || "n/a"}
+Cover letter themes to hit: ${(atsContext!.coverLetterThemes ?? []).slice(0, 4).join("; ") || "n/a"}
+Role requirement summary: ${atsContext!.summaryRequirements || "n/a"}`
+    : "";
+
   return `Write a professional cover letter for this job application.
 
 Job title: ${jobListing.title}
@@ -130,7 +159,7 @@ Job description:
 ${jobDescriptionText}
 
 Candidate profile (ONLY use facts from this block — do not invent employers, dates, degrees, or skills):
-${profileBlock}${adaptBlock}
+${profileBlock}${adaptBlock}${atsBlock}
 
 Return JSON: { "content": "<full letter text>", "citations": [{ "field": "<summary|skills|experience|education>", "excerpt": "<short quote from profile used>" }] }`;
 }

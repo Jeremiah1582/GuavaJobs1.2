@@ -199,6 +199,7 @@ model Application {
   jobDescriptionSnapshot String?                    @db.Text
   jobListingSnapshot     Json?
   jobDescriptionText     String?                    @db.Text
+  jobInsightId           String?                    @db.Uuid
   appliedAt              DateTime?
   resumeId               String?
   coverLetterId          String?                    @unique @db.Uuid
@@ -208,12 +209,53 @@ model Application {
   user            User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   resume          Resume?                      @relation(fields: [resumeId], references: [id], onDelete: SetNull)
   coverLetter     ApplicationCoverLetter?      @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  jobInsight      JobDescriptionInsight?       @relation(fields: [jobInsightId], references: [id], onDelete: SetNull)
   timelineNotes   ApplicationNote[]
   profileSnapshot ApplicationProfileSnapshot?
+  atsReport       ApplicationAtsReport?
 
   @@unique([userId, jobExternalId])
   @@index([userId])
   @@map("applications")
+}
+
+model ApplicationAtsReport {
+  applicationId    String   @id @db.Uuid
+  overallScore     Int
+  letterScore      Int?
+  cvScore          Int?
+  requirementsJson Json
+  keywordsJson     Json
+  letterMatchJson  Json
+  cvMatchJson      Json
+  icpMatchJson     Json     @default("{}")
+  tipsJson         Json
+  inputFingerprint String
+  analyzedAt       DateTime
+  updatedAt        DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_ats_reports")
+}
+
+model JobDescriptionInsight {
+  id                     String   @id @default(uuid()) @db.Uuid
+  jobExternalId          String?
+  jobSource              String?
+  descriptionFingerprint String   @unique
+  title                  String?
+  company                String?
+  icpJson                Json
+  keywordsJson           Json
+  modelVersion           String   @default("icp-v1")
+  analyzedAt             DateTime
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  applications           Application[]
+
+  @@unique([jobExternalId, jobSource])
+  @@map("job_description_insights")
 }
 
 model ApplicationCoverLetter {

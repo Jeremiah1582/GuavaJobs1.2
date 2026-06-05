@@ -75,6 +75,34 @@ export async function generateCoverLetterFromJobAction(
   }
 }
 
+export async function generateCoverLetterForApplicationAction(
+  applicationId: string,
+): Promise<GenerateCoverLetterActionResult> {
+  const session = await getSession()
+  if (!session) {
+    redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/applications/${applicationId}`)}`)
+  }
+
+  await usersService.ensureUser(session)
+
+  try {
+    const bundle = await applicationsService.getBundleForUser(session.id, applicationId)
+    const hasLetter = Boolean(bundle.letter?.content?.trim())
+
+    const result = await coverLettersService.generateForApplication(
+      session.id,
+      applicationId,
+      hasLetter ? { adaptExisting: true } : { fresh: true },
+    )
+    return { ok: true, applicationId: result.applicationId }
+  } catch (err) {
+    if (err instanceof CoverLettersServiceError) {
+      return { ok: false, message: err.userMessage ?? err.message }
+    }
+    throw err
+  }
+}
+
 export async function regenerateCoverLetterAction(
   applicationId: string,
 ): Promise<GenerateCoverLetterActionResult> {

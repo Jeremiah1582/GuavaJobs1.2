@@ -13,6 +13,7 @@ import {
   type CoverLetterContentInput,
 } from "../../validators/cover-letters";
 import { CoverLettersServiceError } from "./errors";
+import { safeRecomputeReport } from "../ats/hooks";
 
 export type {
   CoverLetterCitation,
@@ -188,6 +189,8 @@ export async function upsertLetter(
         ...(isManual ? { isUserEdited: true } : {}),
       },
     });
+    const trigger = options?.source === "AI" ? "letter.generated" : "letter.saved";
+    await safeRecomputeReport(userId, applicationId, trigger);
     return mapLetter(updated, applicationId);
   }
 
@@ -207,6 +210,8 @@ export async function upsertLetter(
     return letter;
   });
 
+  const trigger = options?.source === "AI" ? "letter.generated" : "letter.saved";
+  await safeRecomputeReport(userId, applicationId, trigger);
   return mapLetter(created, applicationId);
 }
 
@@ -239,6 +244,7 @@ export async function updateLetter(
     where: { id: letterId },
     data: { content: parsed.content, isUserEdited: true },
   });
+  await safeRecomputeReport(userId, applicationId, "letter.saved");
   return mapLetter(updated, applicationId);
 }
 

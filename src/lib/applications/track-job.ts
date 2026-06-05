@@ -7,7 +7,7 @@ import { usersService } from "@/lib/users"
 
 import { getSession } from "@/lib/auth/get-session"
 
-export async function trackJobById(jobId: string): Promise<void> {
+export async function trackJobById(jobId: string): Promise<string> {
   const session = await getSession()
   if (!session) {
     redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/jobs?track=${jobId}`)}`)
@@ -21,7 +21,8 @@ export async function trackJobById(jobId: string): Promise<void> {
     redirect("/dashboard/jobs")
   }
 
-  await applicationsService.createFromJobListing(session.id, job)
+  const application = await applicationsService.createFromJobListing(session.id, job)
+  return application.id
 }
 
 export async function trackJobAction(formData: FormData): Promise<void> {
@@ -30,6 +31,6 @@ export async function trackJobAction(formData: FormData): Promise<void> {
     redirect("/dashboard/jobs")
   }
 
-  await trackJobById(jobId)
-  redirect("/dashboard?tracked=1")
+  const applicationId = await trackJobById(jobId)
+  redirect(`/dashboard/applications/${applicationId}?tracked=1`)
 }

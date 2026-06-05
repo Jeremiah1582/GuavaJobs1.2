@@ -37,11 +37,24 @@ function createPrismaClient(): PrismaClient {
   });
 }
 
-export const prisma = globalForPrisma.__internhuntPrisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.__internhuntPrisma = prisma;
+/** Dev hot-reload can keep an old PrismaClient missing delegates added after `prisma generate`. */
+function isPrismaClientStale(client: PrismaClient): boolean {
+  return !("jobDescriptionInsight" in client);
 }
+
+function getPrismaClient(): PrismaClient {
+  const cached = globalForPrisma.__internhuntPrisma;
+  if (cached && !isPrismaClientStale(cached)) {
+    return cached;
+  }
+  const client = createPrismaClient();
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.__internhuntPrisma = client;
+  }
+  return client;
+}
+
+export const prisma = getPrismaClient();
 
 export type { Prisma } from "@/generated/prisma";
 
