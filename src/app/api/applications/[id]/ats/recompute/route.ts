@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ApiErrorCode } from "@/lib/api/errors"
 import { recomputeReport } from "@/lib/applications/ats"
 import { usersService } from "@/lib/users"

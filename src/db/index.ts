@@ -24,6 +24,7 @@ function getDatabaseUrl(): string {
 
 const globalForPrisma = globalThis as typeof globalThis & {
   __internhuntPrisma?: PrismaClient;
+  __internhuntPrismaError?: Error;
 };
 
 function createPrismaClient(): PrismaClient {
@@ -43,18 +44,39 @@ function isPrismaClientStale(client: PrismaClient): boolean {
 }
 
 function getPrismaClient(): PrismaClient {
+  // If we previously tried to create a client and failed, rethrow only when actually accessed.
+  if (globalForPrisma.__internhuntPrismaError) {
+    throw globalForPrisma.__internhuntPrismaError;
+  }
+
   const cached = globalForPrisma.__internhuntPrisma;
   if (cached && !isPrismaClientStale(cached)) {
     return cached;
   }
-  const client = createPrismaClient();
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.__internhuntPrisma = client;
+
+  try {
+    const client = createPrismaClient();
+    if (process.env.NODE_ENV !== "production") {
+      globalForPrisma.__internhuntPrisma = client;
+    }
+    return client;
+  } catch (err) {
+    // Cache the error so we don't keep trying. Rethrow on access.
+    globalForPrisma.__internhuntPrismaError = err instanceof Error ? err : new Error(String(err));
+    throw globalForPrisma.__internhuntPrismaError;
   }
-  return client;
 }
 
-export const prisma = getPrismaClient();
+let __prismaInstance: PrismaClient | null = null;
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_, prop) {
+    if (__prismaInstance === null) {
+      __prismaInstance = getPrismaClient();
+    }
+    return Reflect.get(__prismaInstance, prop);
+  },
+});
 
 export type { Prisma } from "@/generated/prisma";
 

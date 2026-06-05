@@ -10,6 +10,8 @@ import { randomUUID } from "crypto";
 import { toEpochMsNumber } from "@/lib/epoch-ms";
 import { resumeTextForAI } from "@/lib/pdf-extract.server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const session = await getLegacyApiSession();

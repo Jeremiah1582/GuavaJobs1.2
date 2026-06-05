@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // src/app/api/jobs/[id]/apply/route.ts — track applied job id + source only
 import { NextRequest, NextResponse } from "next/server";
 import {

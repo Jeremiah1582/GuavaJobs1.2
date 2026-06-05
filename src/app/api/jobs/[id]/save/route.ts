@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // src/app/api/jobs/[id]/save/route.ts — persist job id + source (+ snapshot)
 import { NextRequest, NextResponse } from "next/server";
 import {

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // src/app/api/jobs/route.ts — real listings from per-user SerpAPI cache
 import { NextRequest, NextResponse } from "next/server";
 import {
