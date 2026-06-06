@@ -50,6 +50,8 @@ export type UrlImportApplyPayload = Pick<
 type UrlImportProps = {
   onImport: (data: UrlImportApplyPayload) => void
   className?: string
+  /** When true, skips the idle card and renders the import form directly (e.g. in a dialog). */
+  embedded?: boolean
 }
 
 type ImportState =
@@ -78,11 +80,11 @@ function confidenceLabel(confidence: ProfileUrlImportResult["confidence"]) {
   }
 }
 
-export function UrlImport({ onImport, className }: UrlImportProps) {
+export function UrlImport({ onImport, className, embedded = false }: UrlImportProps) {
   const [url, setUrl] = useState("")
   const [extraPaths, setExtraPaths] = useState("")
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [state, setState] = useState<ImportState>("idle")
+  const [state, setState] = useState<ImportState>(embedded ? "input" : "idle")
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<string | null>(null)
   const [preview, setPreview] = useState<ProfileUrlImportResult | null>(null)
@@ -177,7 +179,7 @@ export function UrlImport({ onImport, className }: UrlImportProps) {
     setPreview(null)
   }
 
-  if (state === "idle") {
+  if (state === "idle" && !embedded) {
     return (
       <button
         type="button"
@@ -205,30 +207,34 @@ export function UrlImport({ onImport, className }: UrlImportProps) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-accent/30 bg-gradient-to-br from-guava-pink-light/40 to-muted/20 transition-all duration-700",
+        embedded
+          ? "space-y-3"
+          : "overflow-hidden rounded-xl border border-accent/30 bg-gradient-to-br from-guava-pink-light/40 to-muted/20 transition-all duration-700",
         className,
       )}
     >
-      <div className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-pink-gradient text-accent-foreground">
-              <Sparkles className="size-4" />
+      <div className={cn(embedded ? "space-y-3" : "p-4")}>
+        {!embedded ? (
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-full bg-guava-pink-gradient text-accent-foreground">
+                <Sparkles className="size-4" />
+              </div>
+              <span className="font-medium text-foreground">Import from URL</span>
             </div>
-            <span className="font-medium text-foreground">Import from URL</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleCancel}
+              className="size-8"
+              disabled={state === "loading"}
+            >
+              <X className="size-4" />
+              <span className="sr-only">Cancel</span>
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={handleCancel}
-            className="size-8"
-            disabled={state === "loading"}
-          >
-            <X className="size-4" />
-            <span className="sr-only">Cancel</span>
-          </Button>
-        </div>
+        ) : null}
 
         {state === "preview" && preview ? (
           <div className="space-y-4">

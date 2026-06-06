@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
-  PenTool, ArrowLeft, Download, Copy, Check,
+  PenTool, Download, Copy, Check,
   Sparkles, Building2, Loader2, RefreshCw,
   FileText, AlertCircle, ChevronDown
 } from "lucide-react";
@@ -116,27 +116,17 @@ export default function CoverLetters() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg border-b border-border px-6 lg:px-8 py-4">
-        <div className="flex items-center gap-4 max-w-5xl mx-auto">
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-9 h-9 rounded-xl border border-border bg-card grid place-items-center hover:bg-secondary transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div>
-            <h1 className="font-display text-xl font-semibold flex items-center gap-2">
-              <PenTool className="w-5 h-5 text-green-500" /> Cover Letter Generator
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Select a job and generate a personalized cover letter
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-6">
+    <div className="min-h-full bg-background">
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-8">
+        <header className="space-y-1">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            <PenTool className="size-5 text-guava-green" />
+            Cover letter generator
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Legacy flow — use Applications for job-scoped letters.
+          </p>
+        </header>
         {/* No resume warning */}
         {!hasResume && (
           <motion.div

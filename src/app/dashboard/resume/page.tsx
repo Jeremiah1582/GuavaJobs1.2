@@ -3,10 +3,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { parseApiResponse } from "@/lib/parse-api-response";
 import {
-  FileText, Upload, CheckCircle, AlertTriangle, ArrowLeft,
+  FileText, Upload, CheckCircle, AlertTriangle,
   Star, TrendingUp, FileUp, Loader2, BarChart3, Award,
   RefreshCw, XCircle, Zap, Target, BookOpen, Code,
   ChevronDown, ChevronUp, Info, AlertCircle,
@@ -367,7 +366,6 @@ function verbReplacement(verb: string): string {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ResumeAnalyzer() {
-  const router = useRouter();
   const [file, setFile]               = useState<File | null>(null);
   const [dragOver, setDragOver]       = useState(false);
   const [status, setStatus]           = useState<"idle" | "analyzing" | "done" | "error">("idle");
@@ -426,38 +424,34 @@ export default function ResumeAnalyzer() {
   const isAnalyzing = status === "analyzing";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg border-b border-border px-6 lg:px-8 py-4">
-        <div className="flex items-center gap-4 max-w-5xl mx-auto">
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-9 h-9 rounded-xl border border-border bg-card grid place-items-center hover:bg-secondary transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div>
-            <h1 className="font-display text-xl font-semibold flex items-center gap-2">
-              <FileText className="w-5 h-5 text-blue-500" /> ATS Resume Analyzer
-            </h1>
-            <p className="text-xs text-muted-foreground">
+    <div className="min-h-full bg-background">
+      <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 md:px-8 md:py-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h2 className="flex items-center gap-2 text-xl font-semibold">
+              <FileText className="size-5 text-guava-green" />
+              ATS resume scan
+            </h2>
+            <p className="text-sm text-muted-foreground">
               {result
                 ? `${result.filename} · Score: ${result.atsScore}/100 · Grade: ${result.grade}`
-                : "Enterprise-grade ATS scan — same logic as Taleo, Workday & Greenhouse"}
+                : "Optional — score your CV document. Step 1 on your profile powers applications."}
             </p>
           </div>
-          {result && (
+          {result ? (
             <button
-              onClick={() => { setResult(null); setFile(null); setError(""); setStatus("idle"); }}
-              className="ml-auto flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-secondary transition-colors"
+              onClick={() => {
+                setResult(null)
+                setFile(null)
+                setError("")
+                setStatus("idle")
+              }}
+              className="flex shrink-0 items-center gap-1.5 self-start rounded-lg bg-card px-3 py-2 text-xs font-medium shadow-sm hover:bg-secondary"
             >
-              <RefreshCw className="w-3 h-3" /> New Scan
+              <RefreshCw className="size-3" /> New scan
             </button>
-          )}
+          ) : null}
         </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-8">
 
         {/* Upload area */}
         {!result && (

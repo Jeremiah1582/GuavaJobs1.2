@@ -117,12 +117,12 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
       {/* Hero Header with Status Color */}
       <header className={cn("border-b border-border/50", rowClass)}>
         <div className="mx-auto max-w-5xl px-4 py-8 md:px-6">
-          {/* Breadcrumb */}
-          <nav className="mb-6">
-            <Button asChild variant="ghost" size="sm" className="gap-2 pl-0 hover:bg-transparent hover:text-foreground">
+          <nav className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-medium uppercase tracking-widest text-guava-pink">Step 3 · Generate your application</p>
+            <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground">
               <Link href="/dashboard/applications">
                 <ArrowLeft className="size-4" />
-                Back to Applications
+                All applications
               </Link>
             </Button>
           </nav>

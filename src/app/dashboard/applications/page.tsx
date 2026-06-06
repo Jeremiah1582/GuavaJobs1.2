@@ -28,7 +28,7 @@ export default async function ApplicationsPage() {
   const applications = await applicationsService.listByUser(session.id)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-12">
+    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
       <Suspense fallback={null}>
         <TrackedToast />
       </Suspense>
@@ -37,7 +37,7 @@ export default async function ApplicationsPage() {
       <header className="mb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="font-serif text-3xl text-foreground md:text-4xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
               Applications
             </h1>
             <p className="mt-2 text-muted-foreground">
@@ -46,7 +46,7 @@ export default async function ApplicationsPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
-              <Link href="/jobs">
+              <Link href="/dashboard/jobs">
                 <Briefcase className="mr-2 size-4" aria-hidden />
                 Browse Jobs
               </Link>

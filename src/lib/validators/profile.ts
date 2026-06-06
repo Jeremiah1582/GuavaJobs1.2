@@ -49,6 +49,8 @@ export const profileImportMetaSchema = z.object({
       }),
     )
     .optional(),
+  /** Fields the user has manually edited — imports must not overwrite without consent. */
+  userEditedFields: z.array(z.string().max(80)).max(64).optional(),
 });
 
 const nullableShortText = (max: number) =>

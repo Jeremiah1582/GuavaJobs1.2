@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useState } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AlertCircle, Loader2, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -15,8 +15,19 @@ import {
   type CareerPreferencesState,
 } from "@/components/profile/career-preferences-section"
 import { QuizSection } from "@/components/profile/quiz-section"
-import { CvProfileImport } from "@/components/profile/cv-profile-import"
-import { UrlImport, type UrlImportApplyPayload } from "@/components/profile/url-import"
+import { ProfileAtsSummary } from "@/components/profile/profile-ats-summary"
+import { ProfileImportLauncher } from "@/components/profile/profile-import-launcher"
+import type { UrlImportApplyPayload } from "@/components/profile/url-import"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +38,12 @@ import {
   type ProfileActionState,
 } from "@/lib/profile/actions"
 import type { ProfileDto } from "@/lib/profile"
+import {
+  collectStringImportConflict,
+  getUserEditedFields,
+  mergeUserEditedFields,
+  type ImportConflict,
+} from "@/lib/profile/user-field-guard"
 import type {
   EducationEntry,
   ExperienceEntry,
@@ -99,6 +116,23 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
   const [career, setCareer] = useState<CareerPreferencesState>(
     careerPreferencesFromProfile(initialProfile)
   )
+  const [userEditedFields, setUserEditedFields] = useState<Set<string>>(() =>
+    getUserEditedFields(initialProfile.importMetaJson),
+  )
+  const [overwriteDialogOpen, setOverwriteDialogOpen] = useState(false)
+  const [importConflicts, setImportConflicts] = useState<ImportConflict[]>([])
+  const pendingImportRef = useRef<UrlImportApplyPayload | null>(null)
+
+  const importMetaForSubmit = mergeUserEditedFields(importMeta, userEditedFields)
+
+  function markEdited(field: string) {
+    setUserEditedFields((prev) => {
+      if (prev.has(field)) return prev
+      const next = new Set(prev)
+      next.add(field)
+      return next
+    })
+  }
 
   // Calculate completeness dynamically (aligned with core sections)
   const calculateCompleteness = () => {
@@ -138,6 +172,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
   useEffect(() => {
     if (saveState?.success) {
       toast.success("Profile saved")
+      setUserEditedFields((fields) => {
+        setImportMeta((prev) => mergeUserEditedFields(prev, fields))
+        return fields
+      })
     }
     if (saveState?.error) {
       toast.error(saveState.error)
@@ -178,40 +216,78 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
     toast.message("CV text applied — review entries and save.")
   }
 
-  function applyIfEmpty(
-    current: string,
-    next: string | null | undefined,
-    setter: (value: string) => void,
-  ) {
-    if (next && !current.trim()) {
-      setter(next)
-    }
-  }
+  function applyUrlImport(data: UrlImportApplyPayload, forceOverwrite = false) {
+    const conflicts: ImportConflict[] = []
 
-  function handleUrlImport(data: UrlImportApplyPayload) {
-    applyIfEmpty(displayName, data.name, setDisplayName)
-    applyIfEmpty(headline, data.headline, setHeadline)
-    applyIfEmpty(location, data.location, setLocation)
-    applyIfEmpty(phone, data.phone, setPhone)
-    applyIfEmpty(websiteUrl, data.websiteUrl, setWebsiteUrl)
-    applyIfEmpty(addressLine1, data.addressLine1, setAddressLine1)
-    applyIfEmpty(addressLine2, data.addressLine2, setAddressLine2)
-    applyIfEmpty(city, data.city, setCity)
-    applyIfEmpty(region, data.region, setRegion)
-    applyIfEmpty(postalCode, data.postalCode, setPostalCode)
-    applyIfEmpty(country, data.country, setCountry)
-    if (data.avatarUrl && !profilePicture) {
-      setProfilePicture(data.avatarUrl)
+    const tryString = (
+      field: string,
+      current: string,
+      incoming: string | null | undefined,
+      setter: (value: string) => void,
+    ) => {
+      const conflict = collectStringImportConflict(
+        field,
+        current,
+        incoming,
+        userEditedFields,
+      )
+      if (conflict) {
+        if (forceOverwrite) setter(conflict.incoming)
+        else conflicts.push(conflict)
+        return
+      }
+      if (incoming?.trim() && !current.trim()) {
+        setter(incoming.trim())
+      }
     }
+
+    tryString("displayName", displayName, data.name, setDisplayName)
+    tryString("headline", headline, data.headline, setHeadline)
+    tryString("location", location, data.location, setLocation)
+    tryString("phone", phone, data.phone, setPhone)
+    tryString("websiteUrl", websiteUrl, data.websiteUrl, setWebsiteUrl)
+    tryString("addressLine1", addressLine1, data.addressLine1, setAddressLine1)
+    tryString("addressLine2", addressLine2, data.addressLine2, setAddressLine2)
+    tryString("city", city, data.city, setCity)
+    tryString("region", region, data.region, setRegion)
+    tryString("postalCode", postalCode, data.postalCode, setPostalCode)
+    tryString("country", country, data.country, setCountry)
+    tryString("summary", summary, data.summary, setSummary)
+
+    if (data.avatarUrl) {
+      const avatarConflict = collectStringImportConflict(
+        "avatarUrl",
+        profilePicture ?? "",
+        data.avatarUrl,
+        userEditedFields,
+      )
+      if (avatarConflict) {
+        if (forceOverwrite) setProfilePicture(avatarConflict.incoming)
+        else conflicts.push(avatarConflict)
+      } else if (!profilePicture?.trim()) {
+        setProfilePicture(data.avatarUrl)
+      }
+    }
+
+    if (conflicts.length > 0 && !forceOverwrite) {
+      pendingImportRef.current = data
+      setImportConflicts(conflicts)
+      setOverwriteDialogOpen(true)
+      return
+    }
+
     if (data.sourceUrl) {
       setLastImportSourceUrl(data.sourceUrl)
-      setImportMeta({
-        confidence: data.confidence,
-        pagesScanned: data.pagesScanned,
-      })
-    }
-    if (data.summary && !summary.trim()) {
-      setSummary(data.summary)
+      setImportMeta((prev) =>
+        mergeUserEditedFields(
+          {
+            ...prev,
+            confidence: data.confidence,
+            pagesScanned: data.pagesScanned,
+          },
+          userEditedFields,
+        ),
+      )
     }
     if (data.skills.length) {
       setSkillsText((prev) => {
@@ -235,30 +311,59 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
     toast.success("Profile data imported — review and save your changes.")
   }
 
+  function handleUrlImport(data: UrlImportApplyPayload) {
+    applyUrlImport(data)
+  }
+
+  function confirmImportOverwrite() {
+    const pending = pendingImportRef.current
+    pendingImportRef.current = null
+    setOverwriteDialogOpen(false)
+    setImportConflicts([])
+    if (pending) applyUrlImport(pending, true)
+  }
+
   return (
-    <div className="space-y-10">
-      {/* Hero Section with Progress Ring and Avatar */}
+    <div className="space-y-8">
+      <ProfileImportLauncher
+        cvFileUrl={initialProfile.cvFileUrl}
+        onImport={handleUrlImport}
+      />
+
+      {/* Hero: avatar, core fields, ATS + profile rings */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-guava-pink-light/50 via-muted/30 to-guava-green-light/30 p-6 md:p-8">
-        <div className="flex flex-col items-center gap-6 md:flex-row md:items-start md:gap-10">
-          {/* Profile Picture */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
           <ProfilePicture
             imageUrl={profilePicture}
-            onImageChange={setProfilePicture}
+            onImageChange={(url) => {
+              markEdited("avatarUrl")
+              setProfilePicture(url)
+            }}
           />
 
-          {/* Progress Ring and Info */}
-          <div className="flex flex-1 flex-col items-center gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="w-full max-w-md space-y-3 text-center md:text-left">
-              <h2 className="font-serif text-2xl text-foreground">
-                Your Profile
-              </h2>
+          <div className="flex min-w-0 flex-1 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="w-full min-w-0 space-y-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-guava-pink">
+                  Your profile
+                </p>
+                <h1 className="mt-1 font-serif text-2xl text-foreground md:text-3xl">
+                  {displayName.trim() || "Add your details"}
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Powers job matching and AI cover letters.
+                </p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="displayName">Full name</Label>
                   <Input
                     id="displayName"
                     value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    onChange={(e) => {
+                      markEdited("displayName")
+                      setDisplayName(e.target.value)
+                    }}
                     placeholder="Jane Smith"
                     maxLength={200}
                   />
@@ -268,7 +373,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                   <Input
                     id="headline"
                     value={headline}
-                    onChange={(e) => setHeadline(e.target.value)}
+                    onChange={(e) => {
+                      markEdited("headline")
+                      setHeadline(e.target.value)
+                    }}
                     placeholder="Senior software engineer"
                     maxLength={300}
                   />
@@ -278,7 +386,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                   <Input
                     id="location"
                     value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    onChange={(e) => {
+                      markEdited("location")
+                      setLocation(e.target.value)
+                    }}
                     placeholder="London, UK"
                     maxLength={200}
                   />
@@ -289,36 +400,42 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                     id="websiteUrl"
                     type="url"
                     value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    onChange={(e) => {
+                      markEdited("websiteUrl")
+                      setWebsiteUrl(e.target.value)
+                    }}
                     placeholder="https://yoursite.com"
                     maxLength={2000}
                   />
                 </div>
               </div>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                A complete profile helps our AI write better cover letters
-                tailored to your experience.
-              </p>
-              {completenessPercent < 80 && (
-                <p className="mt-3 text-sm text-accent">
-                  Complete more sections to improve AI accuracy
-                </p>
-              )}
             </div>
-            <ProgressRing percent={completenessPercent} className="shrink-0" />
+
+            <div className="flex shrink-0 items-center justify-center gap-6 md:gap-8">
+              <ProfileAtsSummary
+                variant="inline"
+                profileCompleteness={initialProfile.completeness.percent}
+                hasCvFile={Boolean(initialProfile.cvFileUrl?.trim())}
+              />
+              <div className="flex flex-col items-center gap-1 text-center">
+                <ProgressRing
+                  percent={completenessPercent}
+                  size={72}
+                  strokeWidth={5}
+                  className="shrink-0"
+                  label="profile"
+                  compact
+                  showLabel={false}
+                />
+                <p className="text-xs font-medium text-foreground">Completion</p>
+                <p className="text-[10px] text-muted-foreground">Form sections</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Quick Import Section */}
-      <section className="space-y-4">
-        <UrlImport onImport={handleUrlImport} />
-        <CvProfileImport
-          cvFileUrl={initialProfile.cvFileUrl}
-          onImport={handleUrlImport}
-        />
-        <CvPasteHelper onApply={handleCvPaste} />
-      </section>
+      <CvPasteHelper onApply={handleCvPaste} />
 
       {/* Main Form */}
       <form action={saveAction} className="space-y-10">
@@ -390,7 +507,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           type="hidden"
           name="importMetaJson"
           value={
-            importMeta ? JSON.stringify(importMeta) : ""
+            importMetaForSubmit ? JSON.stringify(importMetaForSubmit) : ""
           }
         />
         <input type="hidden" name="avatarUrl" value={profilePicture ?? ""} />
@@ -428,7 +545,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               name="summary"
               rows={4}
               value={summary}
-              onChange={(e) => setSummary(e.target.value)}
+              onChange={(e) => {
+                markEdited("summary")
+                setSummary(e.target.value)
+              }}
               maxLength={5000}
               placeholder="A short overview of your background and goals..."
               className="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-[120px] w-full rounded-lg border px-4 py-3 text-sm shadow-xs outline-none transition-all duration-300 focus-visible:ring-[3px]"
@@ -456,7 +576,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                 id="phone"
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  markEdited("phone")
+                  setPhone(e.target.value)
+                }}
                 placeholder="+44 7700 900000"
                 maxLength={40}
                 autoComplete="tel"
@@ -467,7 +590,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="addressLine1"
                 value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
+                onChange={(e) => {
+                  markEdited("addressLine1")
+                  setAddressLine1(e.target.value)
+                }}
                 placeholder="123 High Street"
                 maxLength={200}
                 autoComplete="address-line1"
@@ -478,7 +604,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="addressLine2"
                 value={addressLine2}
-                onChange={(e) => setAddressLine2(e.target.value)}
+                onChange={(e) => {
+                  markEdited("addressLine2")
+                  setAddressLine2(e.target.value)
+                }}
                 placeholder="Flat 4"
                 maxLength={200}
                 autoComplete="address-line2"
@@ -489,7 +618,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="city"
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) => {
+                  markEdited("city")
+                  setCity(e.target.value)
+                }}
                 placeholder="Manchester"
                 maxLength={100}
                 autoComplete="address-level2"
@@ -500,7 +632,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="region"
                 value={region}
-                onChange={(e) => setRegion(e.target.value)}
+                onChange={(e) => {
+                  markEdited("region")
+                  setRegion(e.target.value)
+                }}
                 placeholder="Greater Manchester"
                 maxLength={100}
                 autoComplete="address-level1"
@@ -511,7 +646,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="postalCode"
                 value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
+                onChange={(e) => {
+                  markEdited("postalCode")
+                  setPostalCode(e.target.value)
+                }}
                 placeholder="M1 1AA"
                 maxLength={20}
                 autoComplete="postal-code"
@@ -522,7 +660,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               <Input
                 id="country"
                 value={country}
-                onChange={(e) => setCountry(e.target.value)}
+                onChange={(e) => {
+                  markEdited("country")
+                  setCountry(e.target.value)
+                }}
                 placeholder="United Kingdom"
                 maxLength={100}
                 autoComplete="country-name"
@@ -539,7 +680,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             </div>
             <h2 className="font-serif text-xl text-foreground">Experience</h2>
           </div>
-          <ExperienceSection entries={experience} onChange={setExperience} />
+          <ExperienceSection
+            entries={experience}
+            onChange={(next) => {
+              markEdited("experience")
+              setExperience(next)
+            }}
+          />
         </section>
 
         {/* Skills Section */}
@@ -557,7 +704,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             <Input
               id="skills"
               value={skillsText}
-              onChange={(e) => setSkillsText(e.target.value)}
+              onChange={(e) => {
+                markEdited("skills")
+                setSkillsText(e.target.value)
+              }}
               placeholder="TypeScript, React, project management..."
               className="transition-all duration-300"
             />
@@ -577,7 +727,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setEducation([...education, emptyEducation()])}
+              onClick={() => {
+                markEdited("education")
+                setEducation([...education, emptyEducation()])
+              }}
               className="transition-all duration-300 hover:border-accent"
             >
               <Plus className="size-4" />
@@ -601,9 +754,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      onClick={() =>
+                      onClick={() => {
+                        markEdited("education")
                         setEducation(education.filter((_, i) => i !== index))
-                      }
+                      }}
                       className="size-8 text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="size-4" />
@@ -614,6 +768,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                     <Input
                       value={entry.institution}
                       onChange={(e) => {
+                        markEdited("education")
                         const next = [...education]
                         next[index] = { ...entry, institution: e.target.value }
                         setEducation(next)
@@ -625,6 +780,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                     <Input
                       value={entry.degree ?? ""}
                       onChange={(e) => {
+                        markEdited("education")
                         const next = [...education]
                         next[index] = { ...entry, degree: e.target.value }
                         setEducation(next)
@@ -637,6 +793,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                       value={entry.endDate ?? entry.startDate ?? ""}
                       placeholder="e.g. 2018 - 2022"
                       onChange={(e) => {
+                        markEdited("education")
                         const next = [...education]
                         next[index] = { ...entry, endDate: e.target.value }
                         setEducation(next)
@@ -657,7 +814,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             </div>
             <h2 className="font-serif text-xl text-foreground">Career & logistics</h2>
           </div>
-          <CareerPreferencesSection value={career} onChange={setCareer} />
+          <CareerPreferencesSection
+            value={career}
+            onChange={(next) => {
+              markEdited("career")
+              setCareer(next)
+            }}
+          />
         </section>
 
         {/* Quiz Section */}
@@ -668,7 +831,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             </div>
             <h2 className="font-serif text-xl text-foreground">Job search preferences</h2>
           </div>
-          <QuizSection quiz={quiz} onChange={setQuiz} />
+          <QuizSection
+            quiz={quiz}
+            onChange={(next) => {
+              markEdited("quiz")
+              setQuiz(next)
+            }}
+          />
         </section>
 
         {/* Save Button */}
@@ -741,6 +910,50 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           </Button>
         </form>
       </section>
+
+      <AlertDialog open={overwriteDialogOpen} onOpenChange={setOverwriteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Overwrite your edits?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p>
+                  Import found values that differ from fields you&apos;ve already
+                  edited. Choose whether to replace your saved answers.
+                </p>
+                <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border bg-muted/30 p-3 text-sm">
+                  {importConflicts.map((conflict) => (
+                    <li key={conflict.field}>
+                      <span className="font-medium text-foreground">
+                        {conflict.label}
+                      </span>
+                      <p className="text-muted-foreground">
+                        Yours: {conflict.current}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Import: {conflict.incoming}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                pendingImportRef.current = null
+                setImportConflicts([])
+              }}
+            >
+              Keep my edits
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmImportOverwrite}>
+              Use import values
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

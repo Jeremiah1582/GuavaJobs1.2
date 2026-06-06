@@ -2,9 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import {
-  MessageSquare, ArrowLeft, Send, Bot, User,
+  Send, Bot, User,
   Sparkles, Loader2, Lightbulb, Trash2
 } from "lucide-react";
 
@@ -44,7 +43,6 @@ function MessageContent({ content, role }: { content: string; role: string }) {
 }
 
 export default function AIAssistant() {
-  const router = useRouter();
   const [messages, setMessages]           = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
   const [input, setInput]                 = useState("");
@@ -166,39 +164,21 @@ export default function AIAssistant() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg border-b border-border px-6 lg:px-8 py-4">
-        <div className="flex items-center gap-4 max-w-4xl mx-auto">
+    <div className="flex min-h-full flex-col bg-background">
+      {messages.length > 0 ? (
+        <div className="flex justify-end px-4 pt-4 md:px-8">
           <button
-            onClick={() => router.push("/dashboard")}
-            className="w-9 h-9 rounded-xl border border-border bg-card grid place-items-center hover:bg-secondary transition-colors"
+            onClick={clearHistory}
+            disabled={clearing || loading}
+            className="flex size-9 items-center justify-center rounded-xl bg-card shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
+            title="Clear chat history"
           >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+            {clearing
+              ? <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              : <Trash2 className="size-4 text-muted-foreground" />}
           </button>
-          <div>
-            <h1 className="font-display text-xl font-semibold flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-purple-400" /> AI Career Assistant
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Powered by OpenRouter — ask anything about your career
-            </p>
-          </div>
-          {messages.length > 0 && (
-            <button
-              onClick={clearHistory}
-              disabled={clearing || loading}
-              className="ml-auto w-9 h-9 rounded-xl border border-border bg-card grid place-items-center hover:bg-secondary transition-colors disabled:opacity-40"
-              title="Clear chat history"
-            >
-              {/* FIX: show spinner while clearing so user knows it's working */}
-              {clearing
-                ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                : <Trash2  className="w-4 h-4 text-muted-foreground" />}
-            </button>
-          )}
         </div>
-      </div>
+      ) : null}
 
       {/* Chat area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">

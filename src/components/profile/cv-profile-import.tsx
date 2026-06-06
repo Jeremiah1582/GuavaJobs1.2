@@ -23,6 +23,7 @@ type CvProfileImportProps = {
   cvFileUrl: string | null
   onImport: (data: UrlImportApplyPayload) => void
   className?: string
+  embedded?: boolean
 }
 
 type PanelState = "idle" | "loading" | "preview" | "error"
@@ -59,6 +60,7 @@ export function CvProfileImport({
   cvFileUrl,
   onImport,
   className,
+  embedded = false,
 }: CvProfileImportProps) {
   const [state, setState] = useState<PanelState>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +142,17 @@ export function CvProfileImport({
   }
 
   if (!cvFileUrl && !hasResumeScan) {
+    if (embedded) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          Upload a CV in the section below, or run a scan from{" "}
+          <a href="/dashboard/resume" className="font-medium text-guava-pink hover:underline">
+            Resume
+          </a>
+          , then return here to import.
+        </p>
+      )
+    }
     return null
   }
 
@@ -162,19 +175,22 @@ export function CvProfileImport({
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-dashed border-muted-foreground/30 bg-muted/10 p-4",
-        className,
+    <div className={cn(embedded ? "space-y-3" : "rounded-xl border border-dashed border-muted-foreground/30 bg-muted/10 p-4", className)}>
+      {!embedded ? (
+        <>
+          <p className="mb-3 text-sm font-medium text-foreground">
+            Populate profile from your CV
+          </p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Preview extracted fields, then apply them to the form. You still need to
+            save your profile afterward.
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Preview extracted fields, then apply them to the form.
+        </p>
       )}
-    >
-      <p className="mb-3 text-sm font-medium text-foreground">
-        Populate profile from your CV
-      </p>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Preview extracted fields, then apply them to the form. You still need to
-        save your profile afterward.
-      </p>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {cvFileUrl ? (
