@@ -48,6 +48,7 @@ function mapLetter(
     content: letter.content,
     source: letter.source,
     citations: parseCitations(letter.citationsJson),
+    isUserEdited: letter.isUserEdited,
     createdAt: letter.createdAt,
     updatedAt: letter.updatedAt,
   };
@@ -186,6 +187,7 @@ export async function upsertLetter(
         content: parsed.content,
         ...(options?.source ? { source: options.source } : {}),
         ...(citationsJson !== undefined ? { citationsJson } : {}),
+        ...(options?.source === "AI" ? { isUserEdited: false } : {}),
         ...(isManual ? { isUserEdited: true } : {}),
       },
     });

@@ -143,7 +143,10 @@ export async function updateProfileAction(
 
     const parsed = profileUpdateSchema.parse(input)
     await profileService.update(session.id, parsed)
+    const { triggerJobMatchRescore } = await import("@/lib/jobs/rescore-matches")
+    triggerJobMatchRescore(session.id)
     revalidatePath("/dashboard/profile")
+    revalidatePath("/dashboard/jobs")
     return { success: true }
   } catch (error) {
     const message =

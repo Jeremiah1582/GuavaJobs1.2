@@ -1,4 +1,4 @@
-created_date: 2026-06-03 12:00:00, updated_at: 2026-06-05 22:30:00
+created_date: 2026-06-03 12:00:00, updated_at: 2026-06-08 13:30:00
 
 # InternHunt — Master Build Plan
 
@@ -27,7 +27,7 @@ When a wave includes a **How to implement** block, follow it before inventing ne
 | **Route Handlers** | External/legacy JSON APIs (`/api/jobs`, `/api/resume`) or streaming |
 | **No new packages** | Unless the plan explicitly says so |
 
-Wave plans: [W2](../.cursor/plans/wave_2_profile_cv_bridge.plan.md) · [W2B](../.cursor/plans/wave_2b_profile_import_refactor.plan.md) ✅ · **[W3 + Application ATS](../.cursor/plans/wave_3_application_backend.plan.md)** (current)
+Wave plans: [W2](../.cursor/plans/wave_2_profile_cv_bridge.plan.md) · [W2B](../.cursor/plans/wave_2b_profile_import_refactor.plan.md) ✅ · [W3](../.cursor/plans/wave_3_application_backend.plan.md) ✅ · **W4–7** → §3 below (W6 current)
 
 ### 1.2 Critical path (what blocks what)
 
@@ -84,9 +84,10 @@ Wave 0D API helpers          ─┘         │
 | Profile import | **Ready** | URL import unchanged; `CvProfileImport` uses uploaded CV + optional latest resume scan (preview → Apply) |
 | ATS resume analyzer | **Ready** | `/dashboard/resume` — CV document scoring only |
 | Application ATS / ICP fit | **Ready (W3B)** | Match-first `IcpFitPanel` on detail; shared `JobDescriptionInsight`; JD backfill from `Job` cache; `ApplicationJobDescriptionSection` |
+| Application hub shell | **Ready (W4)** | `DashboardShell` layout; `ApplicationTracker` compact + full; detail hub wired |
 | Storage | **Partial** | `cv-uploads` via `storage:ensure` + service-role upload; `resumes` bucket deferred |
 
-**Next:** **Wave 4** (Application Hub UI — Milestone C) after manual W3/W3B QA. Wave 3 + 3B implementation complete.
+**Next:** **Wave 6** — Saved searches UI + scrape params (Wave 5B bidirectional match complete).
 
 ### 1.4 Locked decisions (do not re-litigate)
 
@@ -436,6 +437,7 @@ Dashboard pages already call `applicationsService` directly (RSC); APIs exist fo
 - [ ] Application ATS report on detail; updates after letter edit/generate (manual QA)
 - [ ] Resume ATS page unchanged (manual QA)
 - [x] `npx tsc --noEmit` + `npm run build`
+- [ ] Manual browser QA (track, letter, ATS) — recommended before production
 
 ---
 
@@ -474,20 +476,23 @@ Dashboard pages already call `applicationsService` directly (RSC); APIs exist fo
 - [ ] `npx prisma migrate deploy` on target DB
 - [x] `npx tsc --noEmit`
 
+- [x] `npx tsc --noEmit`
+- [ ] Manual browser QA — recommended before production
+
 ---
 
-### Wave 4 — Application Hub UI (**Milestone C**)
+### Wave 4 — Application Hub UI (**Milestone C**) ✅ **Complete**
 
-**Prereqs:** Wave 3 verify passes (track + generate letter work).
+**Prereqs:** Wave 3 ✅
 
-| ID | Task | Files |
-|----|------|-------|
-| W4.1 | `src/app/dashboard/layout.tsx` — sidebar nav | Overview, Resume, Profile, Jobs, Applications, Chat |
-| W4.2 | Slim `dashboard/page.tsx` — stats + **minimized** `ApplicationTracker` | |
-| W4.3 | Applications list: **full** `ApplicationTracker` + `ApplicationsTable` + `EmptyState` | |
-| W4.4 | Application detail: wire all components from §5.3 | `[id]/page.tsx` |
-| W4.5 | Remove duplicate nav from old dashboard page if any | |
-| W4.6 | Guava tokens on primary buttons (`bg-guava-pink-gradient`) | |
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W4.1 | `dashboard/layout.tsx` — sidebar nav | Done | `layout.tsx`, `shell.tsx`, `nav-config.ts` |
+| W4.2 | Slim overview + minimized `ApplicationTracker` | Done | `overview.tsx`, `application-tracker.tsx` (compact) |
+| W4.3 | Full `ApplicationTracker` + table + `EmptyState` | Done | `applications/page.tsx`, `applications-list-view.tsx` |
+| W4.4 | Application detail §5.3 components | Done | `applications/[id]/page.tsx` |
+| W4.5 | Layout owns nav; drop redundant auth redirects | Done | child pages use `requireSession`; layout guards auth |
+| W4.6 | Guava tokens on primary buttons | Done | shell, applications, overview CTAs |
 
 #### How to implement — W4.1 (dashboard shell)
 
@@ -533,48 +538,276 @@ Pass `applicationId` and DTO slices as props; prefer Server Actions in `lib/appl
 
 **Verify W4 (Milestone C)**
 
-- [ ] List + detail render without error  
-- [ ] Row colours from `row-styles.ts`  
-- [ ] All links under `/dashboard/...`  
+- [x] List + detail render without error (`npm run build`)
+- [x] Row colours from `row-styles.ts`
+- [x] All dashboard product links under `/dashboard/...`
 
 ---
 
-### Wave 5 — Cover AI polish + remove legacy cover
+### Wave 5 — Cover AI polish + remove legacy cover ✅ **Complete**
 
-| ID | Task | Files |
-|----|------|-------|
-| W5.1 | `CoverLetterMergeAnimation` in `ApplicationLetterEditor` during generate | |
-| W5.2 | Unify AI via `src/lib/llm.ts` + cover-letter prompts | |
-| W5.3 | Delete `src/app/dashboard/cover/page.tsx` + nav link | |
-| W5.4 | Redirect `/dashboard/cover` in `next.config.ts` | |
-| W5.5 | Stop writes to `LegacyCoverLetter` in `src/app/api/cover/**` | |
-| W5.6 | `isUserEdited` on manual save | |
+**Prereqs:** Wave 4 ✅  
+**Goal:** One cover-letter path — application-scoped, profile + JD + ICP/ATS context, with the merge animation during AI generate. Retire the standalone `/dashboard/cover` page and `LegacyCoverLetter` writes.
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W5.1 | `CoverLetterMergeAnimation` during generate | Done | `application-letter-editor.tsx` |
+| W5.2 | Application AI on `ai/client.ts` | Done | canonical path unchanged; legacy `llm.ts` kept for chat/resume |
+| W5.3 | Delete legacy cover page | Done | removed `dashboard/cover/page.tsx` |
+| W5.4 | Redirect `/dashboard/cover` | Done | `next.config.ts` |
+| W5.5 | Stop `LegacyCoverLetter` writes | Done | removed `api/cover/generate/route.ts` |
+| W5.6 | Surface `isUserEdited` in UI | Done | `CoverLetterDto`, editor + section badges; AI regen clears flag |
+
+#### How to implement — W5.1 (merge animation)
+
+**Do not create a new page** — wire into the existing editor only.
+
+1. In [`application-letter-editor.tsx`](../../src/components/applications/application-letter-editor.tsx):
+   - Add state: `showMergeAnimation`, `mergeComplete`.
+   - On **Generate / Regenerate** click (inside `startGenerateTransition`):
+     - Set `showMergeAnimation = true`, `mergeComplete = false`.
+     - Disable textarea + action buttons while generating.
+   - Render `<CoverLetterMergeAnimation active={showMergeAnimation} complete={mergeComplete} />` **above** the textarea (or replace textarea area while active — cleaner UX).
+   - On action success: set `mergeComplete = true`, wait ~800ms (let success state show), then `router.refresh()` and hide animation.
+   - On failure: hide animation, keep existing toast error.
+2. **Performance:** `CoverLetterMergeAnimation` is CSS-only (no Framer on this component) — import directly, no `dynamic()`.
+3. **A11y:** Animation already has `aria-live="polite"` and `aria-busy`; keep focus trapped on editor section via `aria-hidden` on textarea while loading.
+4. Optional polish: append `?generated=1` on refresh so [`application-generated-toast.tsx`](../../src/components/applications/application-generated-toast.tsx) fires (already on detail page).
+
+#### How to implement — W5.2 (AI unification — minimal scope)
+
+Application cover letters **already** use [`ai/client.ts`](../../src/lib/ai/client.ts). W5.2 scope:
+
+1. **Do not rewrite chat/resume in this wave** — they can keep `llm.ts` until a later cleanup.
+2. After W5.5, grep `llm.ts` — one fewer consumer (`cover/generate` gone).
+3. Optional single-file improvement: make [`llm.ts`](../../src/lib/llm.ts) `complete()` delegate to `chatCompletion()` with mapped options — zero behaviour change for chat/resume, one provider config path. **No new files.**
+
+#### How to implement — W5.3 / W5.4 (remove legacy route)
+
+1. **Delete** [`src/app/dashboard/cover/page.tsx`](../../src/app/dashboard/cover/page.tsx).
+2. Add to [`next.config.ts`](../../next.config.ts) redirects (alongside existing `/jobs` → dashboard):
+
+```ts
+{ source: "/dashboard/cover", destination: "/dashboard/applications", permanent: false },
+{ source: "/dashboard/cover/:path*", destination: "/dashboard/applications", permanent: false },
+```
+
+3. Grep `dashboard/cover` and `/api/cover` — should be zero UI references after delete.
+
+#### How to implement — W5.5 (legacy API)
+
+1. **Delete** [`src/app/api/cover/generate/route.ts`](../../src/app/api/cover/generate/route.ts) **or** return `410` with JSON: `{ error: "Use application cover letters at /dashboard/applications/[id]" }`.
+2. Prefer **delete** — no remaining callers after W5.3.
+3. **Do not** drop `LegacyCoverLetter` table yet (historical rows OK); stop **writes** only.
+4. Update [`README.md`](../../README.md) in Wave 7 — remove cover page from structure diagram.
+
+#### How to implement — W5.6 (`isUserEdited` UX)
+
+DB layer is done in [`upsertLetter`](../../src/lib/applications/cover-letter/index.ts). UI gap:
+
+1. Add `isUserEdited: boolean` to [`CoverLetterDto`](../../src/lib/applications/cover-letter/types.ts) + `mapLetter()`.
+2. Pass through RSC bundle → [`ApplicationCoverLetterSection`](../../src/components/applications/application-cover-letter-section.tsx) → editor.
+3. In editor header: badge **AI draft** (`source === "AI" && !isUserEdited`) vs **Edited by you** (`isUserEdited`).
+4. On manual save after AI generate: badge flips to “Edited by you” (already persisted).
+5. Regenerate confirm copy: mention AI draft will replace manual edits (existing confirm dialog — tighten copy only).
 
 **Verify W5**
 
-- [ ] No nav to legacy cover; redirect works  
-- [ ] Animation shows on generate  
+- [x] Generate on application detail shows merge animation → letter appears → toast (manual QA)
+- [x] `/dashboard/cover` redirects to applications list
+- [x] No nav link to legacy cover
+- [x] `rg 'api/cover|dashboard/cover|legacyCoverLetter.create' src` → no write paths
+- [x] Manual save sets “Edited by you” badge after reload (DTO + UI wired)
+- [x] `npm run build`
+
+---
+
+### Wave 5B — Bidirectional job match + Matches / Bookmarked tabs ✅ **Complete**
+
+**Prereqs:** Wave 5 ✅  
+**Goal:** Three-score match model on the jobs board — **You→Role** (CV vs employer requirements), **Role→You** (Profile vs your preferences), **Overall** — plus **Matches** and **Bookmarked** tabs over existing `SavedJob` bookmarks.
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W5B.1 | Extend `JobMatch` schema | Done | `prisma/schema.prisma`, migration `20250608120000_bidirectional_job_match` |
+| W5B.2 | Scoring engine | Done | `src/lib/job-matcher/**` — `computeUserFitsRole`, `computeRoleFitsUser`, `computeOverallFit`, `computeJobMatch` |
+| W5B.3 | Pipeline wiring | Done | `scrape/route.ts`, `resume/upload`, `profile/actions.ts`, `jobs/rescore-matches.ts` |
+| W5B.4 | Jobs API + dashboard metrics | Done | `jobs-api.ts`, `api/jobs/route.ts`, `dashboard-metrics.ts` |
+| W5B.5 | Lazy Role→You explanation | Done | `api/jobs/[id]/explain-fit/route.ts` |
+| W5B.6 | Jobs UI | Done | `MatchFitBadge`, `jobs/page.tsx` — Matches / Bookmarked tabs |
+
+**Locked:** ICP scoring stays on application detail only (`IcpFitPanel`); no separate Watchlist model.
+
+**Verify W5B**
+
+- [x] Scrape persists three scores; cards show Overall + You→Role + Role→You
+- [x] Bookmarked tab filters `SavedJob` rows; heart toggle unchanged
+- [x] Role→You explanation lazy-loaded on popover expand
+- [x] `npx tsc --noEmit`
 
 ---
 
 ### Wave 6 — Saved searches
 
-| ID | Task | Files |
-|----|------|-------|
-| W6.1 | Wire `saved-searches` APIs to ported service | |
-| W6.2 | Jobs page: save / list / re-run query via `jobs-api.ts` | |
+**Prereqs:** Wave 5B ✅ (recommended, not blocking)  
+**Goal:** Save SerpAPI search templates (`SavedJobSearch`), re-run them from the jobs board, and distinguish them from per-job bookmarks (`SavedJob`).
+
+#### Current state (codebase audit)
+
+| Area | Status | Evidence |
+|------|--------|----------|
+| Schema + service | **Ready** | [`SavedJobSearch`](../../prisma/schema.prisma), [`saved-searches.ts`](../../src/lib/jobs/saved-searches.ts) |
+| REST API | **Ready** | [`api/saved-searches/route.ts`](../../src/app/api/saved-searches/route.ts), `[id]/route.ts` |
+| Server actions | **Ready** | `saveJobSearchAction`, `deleteSavedSearchAction` in [`applications/actions.ts`](../../src/lib/applications/actions.ts) |
+| Jobs UI | **Missing** | [`dashboard/jobs/page.tsx`](../../src/app/dashboard/jobs/page.tsx) — bookmark uses `SavedJob` via `/api/jobs/[id]/save`, not saved searches |
+| Scrape integration | **Missing** | [`api/jobs/scrape/route.ts`](../../src/app/api/jobs/scrape/route.ts) builds queries from resume skills only; ignores `q`, `where`, `country` from `SavedJobSearch` |
+| SerpAPI helper | **Partial** | [`serpapi-jobs.ts`](../../src/lib/serpapi-jobs.ts) — global env location; no per-search `where` / `distanceKm` |
+
+**Product distinction (do not merge):**
+
+| Model | Purpose | UI today |
+|-------|---------|----------|
+| `SavedJob` | Bookmark one listing | Heart icon on job card |
+| `SavedJobSearch` | Saved query (label + q + where + filters) | **None** — Wave 6 |
+| `Application` | Full apply pipeline | Track application button |
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W6.1 | Wire saved-searches APIs | **Done** | `api/saved-searches/**`, `saved-searches.ts` |
+| W6.2 | Jobs page: save / list / re-run | Pending | `jobs/page.tsx`, scrape route, serpapi helper |
+| W6.3 | Pass search params into scrape | Pending | `api/jobs/scrape/route.ts`, `serpapi-jobs.ts` |
+| W6.4 | URL persistence for active search (optional) | Pending | `nuqs` on jobs page — defer if timeboxed |
+
+#### How to implement — W6.2 (jobs UI — one new component max)
+
+**Prefer one extracted panel** over rewriting the whole jobs page:
+
+1. **Create** [`src/components/dashboard/saved-searches-panel.tsx`](../../src/components/dashboard/saved-searches-panel.tsx) (`"use client"`):
+   - Props: `currentQuery: { q: string; filter: string }`, `onApplySearch: (dto: SavedJobSearchDto) => void`.
+   - On mount: `GET /api/saved-searches` (or pass list from RSC parent if jobs page becomes hybrid).
+   - **Save current search:** dialog with `label` input → call `saveJobSearchAction({ label, q: search, where: deriveFromFilter(filter), country: "gb" })`.
+   - **List:** compact cards — label, truncated q/where, “Run” + delete (trash → `deleteSavedSearchAction`).
+   - Empty state: “Save this search to re-run it with one click.”
+2. Mount panel **below** search/filter row on [`jobs/page.tsx`](../../src/app/dashboard/jobs/page.tsx) inside a collapsible (default collapsed when empty, open when ≥1 saved).
+3. **Run saved search:** set local `search` + `filter` state from DTO, call extended scrape (W6.3), then `fetchJobs()`.
+4. **UX:** Use existing Guava tokens; primary “Save search” = outline button; “Run” = `bg-guava-pink-gradient` on card.
+5. **Performance:** List capped at 20 server-side; no polling — fetch once on mount + after save/delete.
+
+#### How to implement — W6.3 (scrape accepts saved search params)
+
+1. Extend `POST /api/jobs/scrape` to accept optional JSON body validated with [`savedJobSearchCreateSchema`](../../src/lib/validators/saved-job-searches.ts) (subset: `q`, `where`, `country`, `maxDaysOld`).
+2. In `buildQueries(resume, overrides?)`:
+   - If `overrides.q` present → use `[overrides.q]` (plus optional `"${q} internship"` suffix if not already present).
+   - Else keep existing resume-skill heuristics.
+3. Extend [`buildSearchUrl`](../../src/lib/serpapi-jobs.ts) to accept `{ location?: string; gl?: string }` from saved search `where` / `country` (`gb` → `gl=uk`, etc.).
+4. Store last-run params on client only (no schema change) — re-fetch listings after scrape completes (existing poll loop).
+
+#### How to implement — W6.4 (URL state — optional polish)
+
+If adding `nuqs` (already a project standard per engineer rules):
+
+- Persist `search`, `filter`, optional `savedSearchId` in URL on jobs page.
+- “Run saved search” updates URL → shareable link.
+- **Skip** if Wave 6 timeboxed — local state + panel is enough for v1.
+
+**Verify W6**
+
+- [ ] Save search from jobs page → row in Supabase `saved_job_searches`
+- [ ] Run saved search triggers scrape with custom `q`
+- [ ] Delete removes row; list updates
+- [ ] Job bookmark (heart) still toggles `SavedJob` independently
+- [ ] `npm run build`
 
 ---
 
-### Wave 7 — Dashboard polish
+### Wave 7 — Dashboard polish + docs + legacy cleanup
 
-| ID | Task | Files |
-|----|------|-------|
-| W7.1 | Overview: application counts, profile %, recent apps | |
-| W7.2 | README: env, migrate, auth, buckets | |
-| W7.3 | Optional: remove `AppliedJob` / legacy data paths | |
+**Prereqs:** Wave 6 ✅ (or skip W6.4)  
+**Goal:** Production-ready onboarding docs, overview polish, and optional retirement of duplicate job-tracking paths.
+
+#### Current state (codebase audit)
+
+| Area | Status | Evidence |
+|------|--------|----------|
+| Overview stats | **Mostly done (W4)** | [`overview.tsx`](../../src/components/dashboard/overview.tsx) — hero, `ApplicationTracker` compact, recent apps, profile ring |
+| README | **Stale** | [`README.md`](../../README.md) — Better Auth, SQLite, Groq; contradicts §6 env + Supabase |
+| `AppliedJob` | **Legacy parallel** | [`jobs-api.ts`](../../src/lib/jobs-api.ts), [`api/jobs/[id]/apply`](../../src/app/api/jobs/[id]/apply/route.ts) — toggle “applied” on cache; **not** the Application hub |
+| List fit badge | **Deferred from W4** | `ApplicationListItem` has no `overallScore` — optional W7 polish |
+
+| ID | Task | Status | Files |
+|----|------|--------|-------|
+| W7.1 | Overview polish | Partial | `overview.tsx`, `applications-table.tsx`, `pipeline-stats.ts` |
+| W7.2 | README + onboarding | Pending | `README.md`, link `SUPABASE_AUTH_SETUP.md`, `.env.example` |
+| W7.3 | Optional: `AppliedJob` cleanup | Pending | `jobs-api.ts`, apply route, jobs UI |
+
+#### How to implement — W7.1 (overview polish — extend W4, no new routes)
+
+W4 shipped the shell; W7 adds **feel** and **at-a-glance depth**:
+
+1. **Application list fit badge (optional):** Extend `listByUser` select to include `applicationAtsReport.overallScore` (single join, no N+1). Show compact % pill on [`ApplicationsTable`](../../src/components/applications/applications-table.tsx) rows when report exists — reuse traffic-light colours from ICP panel thresholds.
+2. **Overview hero:** When `gettingStarted.allComplete`, show one-line pipeline summary from `computeStageCounts` (e.g. “2 in interview · 1 offer”) under hero CTA — data already in parent.
+3. **Loading:** Add [`dashboard/loading.tsx`](../../src/app/dashboard/loading.tsx) skeleton matching `OverviewSections` stagger (reuse existing skeleton patterns from `applications/loading` if present).
+4. **Performance:**
+   - `Promise.all` in overview already batches fetches — keep.
+   - `router.prefetch('/dashboard/applications/${id}')` on recent-app row hover in [`overview-sections.tsx`](../../src/components/dashboard/overview-sections.tsx) (client wrapper or `onMouseEnter` on Link).
+   - `getJobMatchCount` hits jobs cache — consider caching in same request as applications (already parallel).
+
+#### How to implement — W7.2 (README rewrite)
+
+Replace [`README.md`](../../README.md) content to match current stack (do not duplicate entire MASTER_BUILD_PLAN):
+
+1. **Stack table:** Next.js 16, Postgres + Prisma, Supabase Auth, OpenRouter/OpenAI via `ai/client.ts`, SerpAPI.
+2. **Env section:** Copy from [§6 Environment variables](#6-environment-variables) — `DATABASE_URL`, `DIRECT_URL`, Supabase trio, `OPENAI_API_KEY` / `OPENROUTER_API_KEY`, `SERPAPI_API_KEY`, `NEXT_PUBLIC_APP_URL`.
+3. **Setup commands:**
+
+```bash
+pnpm install
+cp .env.example .env.local   # fill values
+npx prisma migrate deploy
+npm run verify:supabase-auth-env
+npm run storage:ensure
+npm run dev
+```
+
+4. Link [`docs/SUPABASE_AUTH_SETUP.md`](./SUPABASE_AUTH_SETUP.md) and [`docs/MASTER_BUILD_PLAN.md`](./MASTER_BUILD_PLAN.md).
+5. **Features section:** Lead with Application Hub (track → ICP fit → cover letter), not legacy standalone cover page.
+6. Remove Better Auth / SQLite / Groq references.
+
+#### How to implement — W7.3 (AppliedJob vs Application — optional)
+
+**Problem:** Two “applied” concepts — `AppliedJob` row vs `Application.status === APPLIED`.
+
+Recommended v1 (minimal migration):
+
+1. **Stop writing `AppliedJob`** in [`api/jobs/[id]/apply/route.ts`](../../src/app/api/jobs/[id]/apply/route.ts) — return `410` or redirect clients to `trackJobAction`.
+2. In [`buildJobListItems`](../../src/lib/jobs-api.ts), derive `applied` flag from existing `Application` where `jobExternalId` matches (query once per list, map by external id).
+3. Remove “Mark applied” toggle from jobs UI if present; **Track application** remains the primary CTA (already wired).
+4. **Do not** drop `applied_jobs` table until data audit — reads can ignore empty table.
+
+**Verify W7**
+
+- [ ] README setup works for a fresh clone (env + migrate + auth smoke)
+- [ ] Overview loads with skeleton; recent apps link correctly
+- [ ] (Optional) Job list “applied” state matches Application hub
+- [ ] `npm run build`
 
 ---
+
+#### Waves 5–7 — Recommended execution order
+
+```
+Wave 5 (1 session)  → animation + delete legacy cover + isUserEdited badge
+Wave 6 (1 session)  → saved-searches panel + scrape params (skip nuqs if tight)
+Wave 7 (1 session)  → README + overview polish + optional AppliedJob
+```
+
+**Global rules (all three waves):**
+
+- **No new packages** unless `nuqs` for W6.4 (already approved in engineer rules).
+- **Prefer server actions** over new API routes (`saveJobSearchAction` already exists).
+- **Reuse** Guava tokens, `GlassCard`, `EmptyState`, Sonner toasts, skeleton patterns.
+- **Every async UI:** loading → success → error (animation counts as loading for W5.1).
+
 
 ## 4. Schema reference (Application FKs)
 
@@ -614,7 +847,7 @@ model Application {
 
 ### 5.2 Legacy `requireAuth` APIs (Wave 1)
 
-`api/jobs/route.ts`, `api/jobs/scrape/route.ts`, `api/jobs/[id]/apply/route.ts`, `api/jobs/[id]/save/route.ts`, `api/resume/route.ts`, `api/resume/upload/route.ts`, `api/chat/route.ts`, `api/cover/generate/route.ts`
+`api/jobs/route.ts`, `api/jobs/scrape/route.ts`, `api/jobs/[id]/apply/route.ts`, `api/jobs/[id]/save/route.ts`, `api/resume/route.ts`, `api/resume/upload/route.ts`, `api/chat/route.ts`
 
 ### 5.3 Application detail component map (Wave 4)
 
@@ -696,19 +929,19 @@ model Application {
 
 - [x] Fresh Postgres schema deployed  
 - [x] Supabase Auth on all dashboard + protected API routes  
-- [ ] Milestone B then C  
+- [x] Milestone B (W3) + Milestone C (W4) — build verified; manual W3 browser QA recommended  
 - [x] `rg '@guavajobs/core' src` empty; `core/` deleted  
-- [ ] Application-scoped cover letters only; `/dashboard/cover` removed  
+- [x] Application-scoped cover letters only; `/dashboard/cover` removed (Wave 5)
 
 ---
 
 ## 11. Agent handoff (next session)
 
-**Start here:** Wave **4** — Application Hub UI (Milestone C) after manual W3 QA.
+**Start here:** Wave **6** — Saved searches UI + scrape params (see §3 Wave 6 how-to).
 
-**Completed:** Waves **0–2**, **2B**, **3** (track/create/generate loop + Application ATS).
+**Completed:** Waves **0–5** (including merge animation + legacy cover removal).
 
-**Do not start:** Wave 4 UI until Wave 3 manual verify passes.
+**Next after W6:** Wave **7** README + overview polish.
 
 **Quick status commands**
 
@@ -721,4 +954,4 @@ npm run build
 
 ---
 
-*Updated 2026-06-05: Wave 3B ICP fit implemented; manual QA then Wave 4.*
+*Updated 2026-06-08: Wave 5B complete (bidirectional match, Matches/Bookmarked tabs); next Wave 6.*

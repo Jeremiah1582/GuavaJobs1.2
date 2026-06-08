@@ -13,5 +13,8 @@ export async function getJobMatchCount(userId: string): Promise<number> {
   const { cached, matches, saved, applied } = await listJobsForUser(userId, resume?.id ?? null)
   const jobs = buildJobListItems(cached, matches, saved, applied)
 
-  return jobs.filter((j) => j.matchScore !== null && j.matchScore >= MATCH_THRESHOLD).length
+  return jobs.filter((j) => {
+    const score = j.overallFitScore ?? j.matchScore
+    return score !== null && score >= MATCH_THRESHOLD
+  }).length
 }

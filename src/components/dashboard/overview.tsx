@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation"
 import { Suspense } from "react"
 
+import { ApplicationTracker } from "@/components/dashboard/application-tracker"
 import { OverviewHero } from "@/components/dashboard/overview-hero"
 import {
   GettingStartedSection,
@@ -10,22 +10,16 @@ import {
 } from "@/components/dashboard/overview-sections"
 import { TrackedToast } from "@/components/dashboard/tracked-toast"
 import { applicationsService } from "@/lib/applications/server"
-import { getSession } from "@/lib/auth/get-session"
+import { requireSession } from "@/lib/auth/require-session"
 import { getJobMatchCount } from "@/lib/dashboard/dashboard-metrics"
 import { computeGettingStartedState } from "@/lib/dashboard/getting-started"
 import { computeDashboardPipelineStats } from "@/lib/dashboard/pipeline-stats"
 import { profileService } from "@/lib/profile"
-import { usersService } from "@/lib/users"
 
 export const dynamic = "force-dynamic"
 
 export async function DashboardOverview() {
-  const session = await getSession()
-  if (!session) {
-    redirect("/sign-in?next=/dashboard")
-  }
-
-  await usersService.ensureUser(session)
+  const session = await requireSession()
   const [applications, profile, jobMatchCount] = await Promise.all([
     applicationsService.listByUser(session.id),
     profileService.getByUserId(session.id),
@@ -53,6 +47,7 @@ export async function DashboardOverview() {
           completeness={completeness}
         />
         {!gettingStarted.allComplete ? <GettingStartedSection state={gettingStarted} /> : null}
+        <ApplicationTracker applications={sortedApplications} variant="compact" />
         <RecentApplicationsSection applications={sortedApplications} />
         <MoreToolsSection />
       </OverviewSections>

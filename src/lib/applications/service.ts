@@ -469,6 +469,7 @@ function mapCoverLetterDto(
     content: letter.content,
     source: letter.source,
     citations,
+    isUserEdited: letter.isUserEdited,
     createdAt: letter.createdAt,
     updatedAt: letter.updatedAt,
   };

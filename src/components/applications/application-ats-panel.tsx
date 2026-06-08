@@ -1,5 +1,8 @@
 "use client"
 
+/**
+ * @deprecated Superseded by IcpFitPanel — keyword + fit UI lives in the match-first ICP panel.
+ */
 import { useCallback, useEffect, useState, useTransition } from "react"
 import { Loader2, RefreshCw, Target } from "lucide-react"
 import { apiErrorMessage, parseApiResponse } from "@/lib/parse-api-response"

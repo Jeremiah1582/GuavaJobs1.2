@@ -36,7 +36,7 @@ import {
 } from "@/lib/applications/actions"
 import { cn } from "@/lib/utils"
 
-type ApplicationTrackerProps = {
+type ApplicationsTableProps = {
   applications: ApplicationListItem[]
 }
 
@@ -62,7 +62,7 @@ function getStatusIndicator(status: string, rejectionPhase?: string | null) {
   }
 }
 
-export function ApplicationsTable({ applications }: ApplicationTrackerProps) {
+export function ApplicationsTable({ applications }: ApplicationsTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [details, setDetails] = useState<Record<string, ApplicationDetail>>({})
   const [loadingId, setLoadingId] = useState<string | null>(null)

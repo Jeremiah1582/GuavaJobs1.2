@@ -3,6 +3,7 @@
 import { prisma } from "@/db";
 import type { AppliedJob, Job, JobMatch, SavedJob } from "@/generated/prisma";
 import { epochMsNow, epochMsToDate } from "@/lib/epoch-ms";
+import type { MatchBreakdown } from "@/lib/job-matcher/types";
 import type { ScrapedJob } from "@/lib/scraper";
 
 export const STALE_SCRAPE_MS = 15 * 60 * 1000;
@@ -27,8 +28,13 @@ export type JobListItem = {
   location: string;
   type: string;
   posted: string;
+  /** @deprecated use overallFitScore */
   matchScore: number | null;
   matchReason: string | null;
+  userFitsRoleScore: number | null;
+  roleFitsUserScore: number | null;
+  overallFitScore: number | null;
+  matchBreakdown: MatchBreakdown | null;
   tags: string[];
   saved: boolean;
   applied: boolean;
@@ -36,6 +42,35 @@ export type JobListItem = {
   source: string;
   fromCache: boolean;
 };
+
+function breakdownFromMatch(match: JobMatch | undefined): MatchBreakdown | null {
+  if (!match?.matchBreakdownJson || typeof match.matchBreakdownJson !== "object") {
+    return null;
+  }
+  return match.matchBreakdownJson as MatchBreakdown;
+}
+
+function scoresFromMatch(match: JobMatch | undefined) {
+  if (!match) {
+    return {
+      matchScore: null as number | null,
+      matchReason: null as string | null,
+      userFitsRoleScore: null as number | null,
+      roleFitsUserScore: null as number | null,
+      overallFitScore: null as number | null,
+      matchBreakdown: null as MatchBreakdown | null,
+    };
+  }
+  const overall = match.overallFitScore ?? match.matchScore;
+  return {
+    matchScore: overall,
+    matchReason: match.matchReason || null,
+    userFitsRoleScore: match.userFitsRoleScore ?? match.matchScore,
+    roleFitsUserScore: match.roleFitsUserScore ?? null,
+    overallFitScore: overall,
+    matchBreakdown: breakdownFromMatch(match),
+  };
+}
 
 /** Mark abandoned scrape runs so "Scan Jobs" is not blocked forever. */
 export async function clearStaleScrapeRuns(): Promise<number> {
@@ -244,6 +279,7 @@ export function buildJobListItems(
 
   for (const job of cached) {
     const match = matchMap.get(job.id);
+    const scores = scoresFromMatch(match);
     byId.set(job.id, {
       id: job.id,
       title: job.title,
@@ -251,8 +287,7 @@ export function buildJobListItems(
       location: job.location,
       type: job.locationType,
       posted: postedLabel(job.postedAt),
-      matchScore: match?.matchScore ?? null,
-      matchReason: match?.matchReason ?? null,
+      ...scores,
       tags: safeJsonArray(job.requiredSkills),
       saved: savedSet.has(job.id),
       applied: appliedSet.has(job.id),
@@ -274,8 +309,7 @@ export function buildJobListItems(
       location: snap.location,
       type: snap.locationType,
       posted: postedLabel(snap.postedAt),
-      matchScore: match?.matchScore ?? null,
-      matchReason: match?.matchReason ?? null,
+      ...scoresFromMatch(match),
       tags: snap.requiredSkills,
       saved: true,
       applied: appliedSet.has(s.jobExternalId),

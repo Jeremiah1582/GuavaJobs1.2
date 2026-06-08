@@ -374,13 +374,17 @@ model Job {
 }
 
 model JobMatch {
-  id          String @id
-  userId      String @map("user_id") @db.Uuid
-  jobId       String @map("job_id")
-  resumeId    String @map("resume_id")
-  matchScore  Int    @map("match_score")
-  matchReason String @default("") @map("match_reason")
-  computedAt  BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("computed_at")
+  id                 String @id
+  userId             String @map("user_id") @db.Uuid
+  jobId              String @map("job_id")
+  resumeId           String @map("resume_id")
+  matchScore         Int    @map("match_score")
+  matchReason        String @default("") @map("match_reason")
+  userFitsRoleScore  Int    @map("user_fits_role_score")
+  roleFitsUserScore  Int?   @map("role_fits_user_score")
+  overallFitScore    Int    @map("overall_fit_score")
+  matchBreakdownJson Json   @default("{}") @map("match_breakdown_json")
+  computedAt         BigInt @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("computed_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)

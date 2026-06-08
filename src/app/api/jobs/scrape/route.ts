@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
 import { randomUUID } from "crypto";
-import { computeMatchScore, resetGroqCallCounter } from "@/lib/job-matcher";
+import { rescoreUserJobMatches } from "@/lib/jobs/rescore-matches";
 import {
   clearStaleScrapeRuns,
   countUserCachedJobs,
@@ -210,55 +210,10 @@ async function runScraper(
     const jobIds = scraped.map((j) => j.id);
     await pruneOrphanMatches(userId, jobIds);
 
-    let skills: string[] = [];
-    try {
-      skills = JSON.parse(resume.skills) as string[];
-    } catch {
-      skills = [];
-    }
-    resetGroqCallCounter();
-
-    let scored = 0;
-    const BATCH = 3;
-    const DELAY = 1500;
-
-    for (let i = 0; i < scraped.length; i += BATCH) {
-      await Promise.all(
-        scraped.slice(i, i + BATCH).map(async (job) => {
-          const alreadyScored = await prisma.jobMatch.findFirst({
-            where: { jobId: job.id, resumeId: resume.id },
-          });
-          if (alreadyScored) return;
-
-          try {
-            const { score, reason } = await computeMatchScore(
-              skills,
-              resume.rawText,
-              job.title,
-              job.description,
-              job.requiredSkills,
-            );
-            await prisma.jobMatch.create({
-              data: {
-                id: randomUUID(),
-                userId,
-                jobId: job.id,
-                resumeId: resume.id,
-                matchScore: score,
-                matchReason: reason,
-              },
-            });
-            scored++;
-          } catch {
-            /* non-fatal */
-          }
-        }),
-      );
-
-      if (i + BATCH < scraped.length) {
-        await new Promise((r) => setTimeout(r, DELAY));
-      }
-    }
+    const scored = await rescoreUserJobMatches({
+      userId,
+      resumeId: resume.id,
+    });
 
     console.log(`[scrape] ${cached} cached, ${scored} scored`);
 

@@ -17,6 +17,7 @@ import {
 import { QuizSection } from "@/components/profile/quiz-section"
 import { ProfileAtsSummary } from "@/components/profile/profile-ats-summary"
 import { ProfileImportLauncher } from "@/components/profile/profile-import-launcher"
+import { ProfileSection, ProfileSectionNav } from "@/components/profile/profile-section-nav"
 import type { UrlImportApplyPayload } from "@/components/profile/url-import"
 import {
   AlertDialog,
@@ -341,7 +342,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             }}
           />
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="w-full min-w-0 space-y-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-widest text-guava-pink">
@@ -350,7 +351,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                 <h1 className="mt-1 font-serif text-2xl text-foreground md:text-3xl">
                   {displayName.trim() || "Add your details"}
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
+                {headline.trim() ? (
+                  <p className="mt-1 text-sm font-medium text-foreground/90">{headline}</p>
+                ) : null}
+                {location.trim() ? (
+                  <p className="mt-0.5 text-sm text-muted-foreground">{location}</p>
+                ) : null}
+                <p className="mt-2 text-sm text-muted-foreground">
                   Powers job matching and AI cover letters.
                 </p>
               </div>
@@ -411,7 +418,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center justify-center gap-6 md:gap-8">
+            <div className="flex shrink-0 flex-col items-center gap-5">
               <ProfileAtsSummary
                 variant="inline"
                 profileCompleteness={initialProfile.completeness.percent}
@@ -435,10 +442,12 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
         </div>
       </section>
 
+      <ProfileSectionNav />
+
       <CvPasteHelper onApply={handleCvPaste} />
 
-      {/* Main Form */}
-      <form action={saveAction} className="space-y-10">
+      {/* Main Form — LinkedIn-style scrollable sections, single save */}
+      <form action={saveAction} className="space-y-0">
         <input
           type="hidden"
           name="experienceJson"
@@ -526,16 +535,8 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           </Alert>
         ) : null}
 
-        {/* Professional Summary Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-muted/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-pink-gradient text-xs font-semibold text-accent-foreground">
-              1
-            </div>
-            <h2 className="font-serif text-xl text-foreground">
-              Professional Summary
-            </h2>
-          </div>
+        {/* About */}
+        <ProfileSection id="about" title="About">
           <div className="space-y-2">
             <Label htmlFor="summary" className="sr-only">
               Professional summary
@@ -550,25 +551,18 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                 setSummary(e.target.value)
               }}
               maxLength={5000}
-              placeholder="A short overview of your background and goals..."
+              placeholder="Write a short overview of your background and goals, like a LinkedIn About section…"
               className="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-[120px] w-full rounded-lg border px-4 py-3 text-sm shadow-xs outline-none transition-all duration-300 focus-visible:ring-[3px]"
             />
           </div>
-        </section>
+        </ProfileSection>
 
-        {/* Contact Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-guava-green-light/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-green-gradient text-xs font-semibold text-white">
-              2
-            </div>
-            <div>
-              <h2 className="font-serif text-xl text-foreground">Contact</h2>
-              <p className="text-sm text-muted-foreground">
-                Optional — used on applications and imports from your site.
-              </p>
-            </div>
-          </div>
+        {/* Contact */}
+        <ProfileSection
+          id="contact"
+          title="Contact"
+          description="Optional — used on applications and imports from your site."
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="phone">Phone</Label>
@@ -670,16 +664,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               />
             </div>
           </div>
-        </section>
+        </ProfileSection>
 
-        {/* Experience Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-guava-green-light/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-green-gradient text-xs font-semibold text-white">
-              3
-            </div>
-            <h2 className="font-serif text-xl text-foreground">Experience</h2>
-          </div>
+        {/* Experience */}
+        <ProfileSection id="experience" title="Experience">
           <ExperienceSection
             entries={experience}
             onChange={(next) => {
@@ -687,16 +675,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               setExperience(next)
             }}
           />
-        </section>
+        </ProfileSection>
 
-        {/* Skills Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-muted/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-pink-gradient text-xs font-semibold text-accent-foreground">
-              4
-            </div>
-            <h2 className="font-serif text-xl text-foreground">Skills</h2>
-          </div>
+        {/* Skills */}
+        <ProfileSection id="skills" title="Skills">
           <div className="space-y-2">
             <Label htmlFor="skills" className="text-sm text-muted-foreground">
               Separate skills with commas
@@ -712,17 +694,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               className="transition-all duration-300"
             />
           </div>
-        </section>
+        </ProfileSection>
 
-        {/* Education Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-guava-green-light/10 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-8 items-center justify-center rounded-full bg-guava-green-gradient text-xs font-semibold text-white">
-                5
-              </div>
-              <h2 className="font-serif text-xl text-foreground">Education</h2>
-            </div>
+        {/* Education */}
+        <ProfileSection
+          id="education"
+          title="Education"
+          action={
             <Button
               type="button"
               variant="outline"
@@ -731,12 +709,12 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
                 markEdited("education")
                 setEducation([...education, emptyEducation()])
               }}
-              className="transition-all duration-300 hover:border-accent"
             >
               <Plus className="size-4" />
               Add
             </Button>
-          </div>
+          }
+        >
           {education.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No education added yet. Click {"\"Add\""} to include your
@@ -804,16 +782,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               ))}
             </div>
           )}
-        </section>
+        </ProfileSection>
 
-        {/* Career preferences */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-guava-pink-light/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-pink-gradient text-xs font-semibold text-accent-foreground">
-              6
-            </div>
-            <h2 className="font-serif text-xl text-foreground">Career & logistics</h2>
-          </div>
+        {/* Career */}
+        <ProfileSection id="career" title="Career & logistics">
           <CareerPreferencesSection
             value={career}
             onChange={(next) => {
@@ -821,16 +793,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               setCareer(next)
             }}
           />
-        </section>
+        </ProfileSection>
 
-        {/* Quiz Section */}
-        <section className="space-y-4 rounded-xl border border-border/50 bg-gradient-to-br from-card to-muted/10 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-guava-green-gradient text-xs font-semibold text-white">
-              7
-            </div>
-            <h2 className="font-serif text-xl text-foreground">Job search preferences</h2>
-          </div>
+        {/* Preferences */}
+        <ProfileSection id="preferences" title="Job search preferences">
           <QuizSection
             quiz={quiz}
             onChange={(next) => {
@@ -838,10 +804,10 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
               setQuiz(next)
             }}
           />
-        </section>
+        </ProfileSection>
 
-        {/* Save Button */}
-        <div className="flex justify-center pt-4">
+        {/* Save */}
+        <div className="flex justify-center py-8">
           <Button
             type="submit"
             size="lg"
@@ -860,15 +826,13 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
         </div>
       </form>
 
-      {/* CV Upload Section */}
-      <section className="space-y-4 rounded-xl border border-dashed border-border/50 bg-muted/20 p-6">
-        <h2 className="font-serif text-lg text-foreground">
-          CV File (Optional)
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Upload a PDF or Word file, then use &quot;Use uploaded CV&quot; above to
-          populate your profile. You can also paste text in the helper above.
-        </p>
+      {/* CV upload — outside form to avoid nesting */}
+      <ProfileSection
+        id="cv"
+        title="CV file"
+        description="Optional PDF or Word upload for ATS scanning and profile import."
+        className="pb-4"
+      >
         {initialProfile.cvFileUrl ? (
           <p className="text-sm text-foreground">
             Current file:{" "}
@@ -909,7 +873,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
             )}
           </Button>
         </form>
-      </section>
+      </ProfileSection>
 
       <AlertDialog open={overwriteDialogOpen} onOpenChange={setOverwriteDialogOpen}>
         <AlertDialogContent>

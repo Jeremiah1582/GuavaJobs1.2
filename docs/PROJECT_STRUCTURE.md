@@ -1,4 +1,4 @@
-created_date: 2026-06-03 14:45:00, updated_at: 2026-06-04 16:00:00
+created_date: 2026-06-03 14:45:00, updated_at: 2026-06-07 18:00:00
 
 # InternHunt — Project structure
 
@@ -20,19 +20,18 @@ Canonical paths for agents. **Execute tasks from** [`MASTER_BUILD_PLAN.md`](./MA
 
 | URL | File |
 |-----|------|
-| `/dashboard` | `src/app/dashboard/page.tsx` — overview + **minimized** `application-tracker` |
+| `/dashboard` | `src/app/dashboard/page.tsx` — overview + compact `ApplicationTracker` |
 | `/dashboard/resume` | `src/app/dashboard/resume/page.tsx` |
 | `/dashboard/jobs` | `src/app/dashboard/jobs/page.tsx` |
 | `/dashboard/profile` | `src/app/dashboard/profile/page.tsx` |
-| `/dashboard/applications` | `src/app/dashboard/applications/page.tsx` — **full** `application-tracker` |
+| `/dashboard/applications` | `src/app/dashboard/applications/page.tsx` — full `ApplicationTracker` + `ApplicationsTable` |
 | `/dashboard/applications/new` | `src/app/dashboard/applications/new/page.tsx` |
 | `/dashboard/applications/[id]` | `src/app/dashboard/applications/[id]/page.tsx` |
 | `/dashboard/chat` | `src/app/dashboard/chat/page.tsx` |
-| `/dashboard/cover` | **Remove Phase 5** |
 
 Redirects: `next.config.ts` (`/applications`, `/profile`, `/jobs` → dashboard).
 
-**Target:** `src/app/dashboard/layout.tsx` — shared sidebar (Phase 4).
+**Target:** `src/app/dashboard/layout.tsx` — shared sidebar via `DashboardShell` (Wave 4 ✅).
 
 ## UI components
 
@@ -40,7 +39,7 @@ Redirects: `next.config.ts` (`/applications`, `/profile`, `/jobs` → dashboard)
 |------|------|
 | Applications | `src/components/applications/` |
 | Profile | `src/components/profile/` |
-| Dashboard | `src/components/dashboard/` — `application-tracker`, `application-status-form`, `application-notes-panel`, `tracked-toast` |
+| Dashboard | `src/components/dashboard/` — `application-tracker`, `shell`, `application-status-form`, `application-notes-panel`, `tracked-toast` |
 | Shared | `src/components/page-header.tsx`, `empty-state.tsx` |
 | shadcn | `src/components/ui/` |
 

@@ -11,6 +11,7 @@ export type CoverLetterDto = {
   content: string;
   source: CoverLetterSource;
   citations: CoverLetterCitation[];
+  isUserEdited: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

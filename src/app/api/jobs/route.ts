@@ -47,10 +47,12 @@ export async function GET(req: NextRequest) {
     }
 
     result.sort((a, b) => {
-      if (a.matchScore === null && b.matchScore === null) return 0;
-      if (a.matchScore === null) return 1;
-      if (b.matchScore === null) return -1;
-      return b.matchScore - a.matchScore;
+      const aScore = a.overallFitScore ?? a.matchScore;
+      const bScore = b.overallFitScore ?? b.matchScore;
+      if (aScore === null && bScore === null) return 0;
+      if (aScore === null) return 1;
+      if (bScore === null) return -1;
+      return bScore - aScore;
     });
 
     return NextResponse.json({

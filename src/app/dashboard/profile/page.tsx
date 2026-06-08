@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 
 import { ProfileForm } from "@/components/profile/profile-form"
-import { getSession } from "@/lib/auth/get-session"
+import { requireSession } from "@/lib/auth/require-session"
 import { profileService } from "@/lib/profile"
-import { usersService } from "@/lib/users"
 
 export const dynamic = "force-dynamic"
 
@@ -13,17 +12,13 @@ export const metadata = {
 }
 
 export default async function DashboardProfilePage() {
-  const session = await getSession()
-  if (!session) {
-    redirect("/sign-in?next=/dashboard/profile")
-  }
+  const session = await requireSession()
 
-  await usersService.ensureUser(session)
   await profileService.getOrCreateForUser(session.id)
   const profile = await profileService.getByUserId(session.id)
 
   if (!profile) {
-    redirect("/sign-in?next=/dashboard/profile")
+    notFound()
   }
 
   return (

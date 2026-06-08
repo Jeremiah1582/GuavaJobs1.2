@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import { Suspense } from "react"
 import {
   ArrowLeft,
@@ -16,7 +16,6 @@ import {
 } from "@/lib/applications/server"
 import { getApplicationRowClass } from "@/lib/applications"
 import { profileService } from "@/lib/profile"
-import { usersService } from "@/lib/users"
 
 import { prisma } from "@/db"
 import { getReportForApplication } from "@/lib/applications/ats"
@@ -34,12 +33,14 @@ import { ApplicationStatusForm } from "@/components/dashboard/application-status
 import { ApplicationNotesPanel } from "@/components/dashboard/application-notes-panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getSession } from "@/lib/auth/get-session"
+import { requireSession } from "@/lib/auth/require-session"
 import { cn } from "@/lib/utils"
 
 type ApplicationDetailPageProps = {
   params: Promise<{ id: string }>
 }
+
+export const dynamic = "force-dynamic"
 
 function formatStatus(status: string, rejectionPhase?: string | null): string {
   if (rejectionPhase === "PRE_INTERVIEW") return "Rejected (pre-interview)"
@@ -61,13 +62,9 @@ function getStatusColor(status: string, rejectionPhase?: string | null) {
 }
 
 export default async function ApplicationDetailPage({ params }: ApplicationDetailPageProps) {
-  const session = await getSession()
-  if (!session) {
-    redirect("/sign-in?next=/dashboard/applications")
-  }
+  const session = await requireSession()
 
   const { id } = await params
-  await usersService.ensureUser(session)
 
   let bundle
   try {
@@ -108,15 +105,14 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
   })
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="mx-auto max-w-5xl">
       <Suspense fallback={null}>
         <ApplicationGeneratedToast />
         <TrackedToast />
       </Suspense>
 
-      {/* Hero Header with Status Color */}
-      <header className={cn("border-b border-border/50", rowClass)}>
-        <div className="mx-auto max-w-5xl px-4 py-8 md:px-6">
+      <header className={cn("rounded-t-xl border border-b-0 border-border/50", rowClass)}>
+        <div className="px-4 py-8 md:px-6">
           <nav className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-medium uppercase tracking-widest text-guava-pink">Step 3 · Generate your application</p>
             <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground">
@@ -196,8 +192,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-5xl px-4 py-8 md:px-6 md:py-12">
+      <main className="rounded-b-xl border border-border/50 px-4 py-8 md:px-6 md:py-12">
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Left Column - Main Content */}
           <div className="space-y-8 lg:col-span-2">
@@ -372,7 +367,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
                 )}
                 {application.jobExternalId && (
                   <Link
-                    href={`/jobs?job=${encodeURIComponent(application.jobExternalId)}`}
+                    href={`/dashboard/jobs?job=${encodeURIComponent(application.jobExternalId)}`}
                     className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm transition-colors hover:bg-muted"
                   >
                     <span>View on Job Board</span>

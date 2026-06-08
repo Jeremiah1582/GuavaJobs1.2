@@ -14,6 +14,7 @@ import {
   getJobCoverLetterContext,
   type JobCoverLetterContext,
 } from "@/lib/applications/cover-letter-context"
+import type { CoverLetterDto } from "@/lib/applications/cover-letter/types"
 
 export type { JobCoverLetterContext } from "@/lib/applications/cover-letter-context"
 
@@ -27,7 +28,7 @@ export async function getJobCoverLetterContextAction(
 }
 
 export type GenerateCoverLetterActionResult =
-  | { ok: true; applicationId: string }
+  | { ok: true; applicationId: string; letter: CoverLetterDto }
   | { ok: false; message: string }
 
 export async function generateCoverLetterFromJobAction(
@@ -66,7 +67,7 @@ export async function generateCoverLetterFromJobAction(
       application.id,
       options,
     )
-    return { ok: true, applicationId: result.applicationId }
+    return { ok: true, applicationId: result.applicationId, letter: result.letter }
   } catch (err) {
     if (err instanceof CoverLettersServiceError) {
       return { ok: false, message: err.userMessage ?? err.message }
@@ -94,7 +95,7 @@ export async function generateCoverLetterForApplicationAction(
       applicationId,
       hasLetter ? { adaptExisting: true } : { fresh: true },
     )
-    return { ok: true, applicationId: result.applicationId }
+    return { ok: true, applicationId: result.applicationId, letter: result.letter }
   } catch (err) {
     if (err instanceof CoverLettersServiceError) {
       return { ok: false, message: err.userMessage ?? err.message }
@@ -117,7 +118,7 @@ export async function regenerateCoverLetterAction(
     const result = await coverLettersService.generateForApplication(session.id, applicationId, {
       adaptExisting: true,
     })
-    return { ok: true, applicationId: result.applicationId }
+    return { ok: true, applicationId: result.applicationId, letter: result.letter }
   } catch (err) {
     if (err instanceof CoverLettersServiceError) {
       return { ok: false, message: err.userMessage ?? err.message }

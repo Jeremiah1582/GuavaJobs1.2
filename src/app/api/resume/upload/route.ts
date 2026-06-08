@@ -762,11 +762,7 @@ Max 60 words per fix. Use \\n for newlines.`;
       },
     });
 
-    scoreExistingJobs(
-      userId, id,
-      rules.technicalSkills.length > 0 ? rules.technicalSkills : rules.presentKeywords,
-      cleanedText
-    ).catch(console.error);
+    scoreExistingJobs(userId, id).catch(console.error);
 
     return NextResponse.json({
       success: true,
@@ -802,58 +798,11 @@ Max 60 words per fix. Use \\n for newlines.`;
 
 // ─── Background job scoring ───────────────────────────────────────────────────
 
-async function scoreExistingJobs(
-  userId: string,
-  resumeId: string,
-  skills: string[],
-  rawText: string
-) {
+async function scoreExistingJobs(userId: string, resumeId: string) {
   try {
-    const { computeMatchScore, resetGroqCallCounter } = await import("@/lib/job-matcher");
-    const { randomUUID } = await import("crypto");
-
-    const allJobs = await prisma.job.findMany({
-      where: { userId, isActive: 1 },
-    });
-    if (allJobs.length === 0) return;
-
-    console.log(`[resume] Background scoring ${allJobs.length} cached jobs...`);
-    resetGroqCallCounter();
-
-    const BATCH = 3;
-    const DELAY = 1500;
-
-    for (let i = 0; i < allJobs.length; i += BATCH) {
-      await Promise.all(
-        allJobs.slice(i, i + BATCH).map(async (job) => {
-          try {
-            const exists = await prisma.jobMatch.findFirst({
-              where: { jobId: job.id, resumeId },
-            });
-            if (exists) return;
-
-            const { score, reason } = await computeMatchScore(
-              skills, rawText, job.title, job.description,
-              JSON.parse(job.requiredSkills),
-            );
-            await prisma.jobMatch.create({
-              data: {
-                id: randomUUID(),
-                userId,
-                jobId: job.id,
-                resumeId,
-                matchScore: score,
-                matchReason: reason,
-              },
-            });
-          } catch { /* non-fatal */ }
-        }),
-      );
-      if (i + BATCH < allJobs.length) {
-        await new Promise((r) => setTimeout(r, DELAY));
-      }
-    }
-    console.log(`[resume] Background scoring complete`);
+    const { rescoreUserJobMatches } = await import("@/lib/jobs/rescore-matches");
+    const count = await rescoreUserJobMatches({ userId, resumeId, force: true });
+    console.log(`[resume] Background scoring complete (${count} jobs)`);
   } catch (e) {
     console.error("[resume] Background scoring failed:", e);
   }

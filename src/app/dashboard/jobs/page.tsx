@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { parseApiResponse } from "@/lib/parse-api-response";
+import type { MatchBreakdown } from "@/lib/job-matcher/types";
 import { trackJobAction } from "@/lib/applications/track-job";
 import { TrackJobButton } from "@/components/dashboard/track-job-button";
+import { MatchFitBadge } from "@/components/jobs/match-fit-badge";
 import {
   Target, MapPin, Clock, Building2, ExternalLink,
   Search, SlidersHorizontal, Bookmark, BookmarkCheck,
-  TrendingUp, Briefcase, RefreshCw, Loader2, AlertCircle
+  Briefcase, RefreshCw, Loader2, AlertCircle
 } from "lucide-react";
 
 type Job = {
@@ -21,6 +23,10 @@ type Job = {
   posted: string;
   matchScore: number | null;
   matchReason: string | null;
+  userFitsRoleScore: number | null;
+  roleFitsUserScore: number | null;
+  overallFitScore: number | null;
+  matchBreakdown: MatchBreakdown | null;
   tags: string[];
   saved: boolean;
   url: string;
@@ -34,39 +40,30 @@ type ScrapeRun = {
   error?: string | null;
 };
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-border text-muted-foreground bg-secondary">
-        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
-        Scoring…
-      </span>
-    );
-  }
-  const color =
-    score >= 85
-      ? "bg-green-500/10 text-green-600 border-green-500/20"
-      : score >= 70
-      ? "bg-accent/10 text-accent border-accent/20"
-      : "bg-muted text-muted-foreground border-border";
+type JobsTab = "matches" | "bookmarked";
 
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${color}`}>
-      <TrendingUp className="w-3 h-3" /> {score}%
-    </span>
-  );
+function isScored(job: Job): boolean {
+  return (job.overallFitScore ?? job.matchScore) !== null;
 }
 
 export default function JobMatcher() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [tab, setTab] = useState<JobsTab>("matches");
   const [filter, setFilter] = useState<"all" | "remote" | "hybrid" | "onsite">("all");
   const [loading, setLoading] = useState(true);
   const [hasResume, setHasResume] = useState(false);
   const [scrapeRun, setScrapeRun] = useState<ScrapeRun | null>(null);
   const [scraping, setScraping] = useState(false);
   const [error, setError] = useState("");
+
+  const savedCount = useMemo(() => jobs.filter((j) => j.saved).length, [jobs]);
+
+  const visibleJobs = useMemo(() => {
+    if (tab === "bookmarked") return jobs.filter((j) => j.saved);
+    return jobs;
+  }, [jobs, tab]);
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -127,32 +124,30 @@ export default function JobMatcher() {
     return () => clearInterval(interval);
   }, [scrapeRun?.status, fetchJobs]);
 
-  // While scores are still computing in background, silently refresh every 4s
-  // Stops once all visible jobs have scores (or after 60s max)
   useEffect(() => {
     if (loading) return;
-    const unscoredCount = jobs.filter(j => j.matchScore === null).length;
-    if (unscoredCount === 0) return; // all scored — nothing to poll
+    const unscoredCount = jobs.filter((j) => !isScored(j)).length;
+    if (unscoredCount === 0) return;
 
     let elapsed = 0;
     const interval = setInterval(() => {
       elapsed += 4000;
-      if (elapsed >= 60000) { clearInterval(interval); return; } // 60s safety cutoff
+      if (elapsed >= 60000) { clearInterval(interval); return; }
 
       fetch(`/api/jobs?${new URLSearchParams({ filter, ...(search ? { search } : {}) })}`)
         .then((r) => parseApiResponse<{ jobs?: Job[] }>(r))
         .then((data) => {
           const updated: Job[] = data.jobs ?? [];
-          // Only update scores — don't re-sort while user is browsing
-          setJobs(prev => prev.map(job => {
-            const fresh = updated.find(u => u.id === job.id);
-            if (fresh && fresh.matchScore !== null && job.matchScore === null) {
-              return { ...job, matchScore: fresh.matchScore, matchReason: fresh.matchReason };
-            }
-            return job;
-          }));
-          // If all scored now, stop polling
-          const stillUnscored = updated.filter(j => j.matchScore === null).length;
+          setJobs((prev) =>
+            prev.map((job) => {
+              const fresh = updated.find((u) => u.id === job.id);
+              if (fresh && isScored(fresh) && !isScored(job)) {
+                return { ...job, ...fresh };
+              }
+              return job;
+            }),
+          );
+          const stillUnscored = updated.filter((j) => !isScored(j)).length;
           if (stillUnscored === 0) clearInterval(interval);
         })
         .catch(() => {});
@@ -231,7 +226,7 @@ export default function JobMatcher() {
               Choose your job listing
             </h2>
             <p className="text-sm text-muted-foreground">
-              Internships ranked by your match score — track any role to start your application.
+              See how well you fit each role — and how well each role fits you — then bookmark favourites to compare.
             </p>
           </div>
           <motion.button
@@ -246,6 +241,37 @@ export default function JobMatcher() {
               : <><RefreshCw className="size-3" /> Scan jobs</>}
           </motion.button>
         </div>
+
+        <div className="flex gap-1 rounded-xl border border-border bg-secondary/50 p-1 w-fit">
+          <button
+            type="button"
+            onClick={() => setTab("matches")}
+            className={`text-xs font-medium px-4 py-2 rounded-lg transition-all ${
+              tab === "matches"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Matches
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("bookmarked")}
+            className={`text-xs font-medium px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+              tab === "bookmarked"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Bookmarked
+            {savedCount > 0 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">
+                {savedCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         {error && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -257,7 +283,6 @@ export default function JobMatcher() {
           </motion.div>
         )}
 
-        {/* No resume banner */}
         {!hasResume && (
           <motion.div
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -265,7 +290,7 @@ export default function JobMatcher() {
           >
             <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <span className="text-amber-700 dark:text-amber-400">
-              Upload your resume to see personalized match scores for each job.
+              Upload your resume to see how you fit each role (You→Role scoring).
             </span>
             <button
               onClick={() => router.push("/dashboard/resume")}
@@ -276,7 +301,6 @@ export default function JobMatcher() {
           </motion.div>
         )}
 
-        {/* Scrape running banner */}
         {isScraping && (
           <motion.div
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -287,7 +311,6 @@ export default function JobMatcher() {
           </motion.div>
         )}
 
-        {/* Search + Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -315,32 +338,37 @@ export default function JobMatcher() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {loading ? "Loading…" : `${jobs.length} real listings`}
-          {scrapeRun?.status === "done" && scrapeRun.jobsFound !== undefined && (
+          {loading ? "Loading…" : `${visibleJobs.length} ${tab === "bookmarked" ? "bookmarked" : ""} listings`}
+          {scrapeRun?.status === "done" && scrapeRun.jobsFound !== undefined && tab === "matches" && (
             <span className="ml-2 text-green-600">· Last scan cached {scrapeRun.jobsFound} from Google Jobs</span>
           )}
         </p>
 
-        {/* Job list */}
         {loading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : jobs.length === 0 ? (
+        ) : visibleJobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-secondary grid place-items-center mb-4">
-              <Target className="w-6 h-6 text-muted-foreground/50" />
+              {tab === "bookmarked"
+                ? <Bookmark className="w-6 h-6 text-muted-foreground/50" />
+                : <Target className="w-6 h-6 text-muted-foreground/50" />}
             </div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">No jobs found</p>
-            <p className="text-xs text-muted-foreground/60">
-              {search
-                ? "Try a different search term."
-                : `Click "Scan Jobs" to fetch real listings from Google Jobs (SerpAPI).`}
+            <p className="text-sm font-medium text-muted-foreground mb-1">
+              {tab === "bookmarked" ? "No bookmarked jobs yet" : "No jobs found"}
+            </p>
+            <p className="text-xs text-muted-foreground/60 max-w-sm">
+              {tab === "bookmarked"
+                ? "Bookmark roles you like to compare their fit here — handy when you have multiple offers to weigh."
+                : search
+                  ? "Try a different search term."
+                  : `Click "Scan Jobs" to fetch real listings from Google Jobs (SerpAPI).`}
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {jobs.map((job, i) => (
+            {visibleJobs.map((job, i) => (
               <motion.div key={job.id}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.3 }}
@@ -363,9 +391,6 @@ export default function JobMatcher() {
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {job.posted}</span>
                       <span className="text-muted-foreground/50 capitalize">{job.source}</span>
                     </div>
-                    {job.matchReason && (
-                      <p className="text-xs text-muted-foreground/70 mt-2 italic leading-relaxed">{job.matchReason}</p>
-                    )}
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {job.tags.slice(0, 6).map((tag) => (
                         <span key={tag} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
@@ -375,7 +400,14 @@ export default function JobMatcher() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                    <ScoreBadge score={job.matchScore} />
+                    <MatchFitBadge
+                      jobId={job.id}
+                      overallFitScore={job.overallFitScore ?? job.matchScore}
+                      userFitsRoleScore={job.userFitsRoleScore}
+                      roleFitsUserScore={job.roleFitsUserScore}
+                      matchReason={job.matchReason}
+                      matchBreakdown={job.matchBreakdown}
+                    />
                     <form action={trackJobAction}>
                       <input type="hidden" name="jobId" value={job.id} />
                       <TrackJobButton />
@@ -384,6 +416,7 @@ export default function JobMatcher() {
                       <button
                         onClick={() => toggleSave(job)}
                         className="w-8 h-8 rounded-lg border border-border grid place-items-center hover:bg-secondary transition-colors"
+                        aria-label={job.saved ? "Remove bookmark" : "Bookmark job"}
                       >
                         {job.saved
                           ? <BookmarkCheck className="w-4 h-4 text-accent" />

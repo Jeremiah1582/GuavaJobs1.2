@@ -1,15 +1,14 @@
 import { Suspense } from "react"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { Briefcase, Plus } from "lucide-react"
 import { applicationsService } from "@/lib/applications/server"
-import { usersService } from "@/lib/users"
+import { requireSession } from "@/lib/auth/require-session"
 
-import { ApplicationsTable } from "@/components/applications/applications-table"
+import { ApplicationsListView } from "@/components/applications/applications-list-view"
 import { TrackedToast } from "@/components/dashboard/tracked-toast"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
-import { getSession } from "@/lib/auth/get-session"
+import { parsePipelineStageFilter } from "@/lib/dashboard/pipeline-stats"
 
 export const dynamic = "force-dynamic"
 
@@ -18,13 +17,15 @@ export const metadata = {
   description: "Track and manage all your job applications in one place.",
 }
 
-export default async function ApplicationsPage() {
-  const session = await getSession()
-  if (!session) {
-    redirect("/sign-in?next=/dashboard/applications")
-  }
+type ApplicationsPageProps = {
+  searchParams: Promise<{ stage?: string }>
+}
 
-  await usersService.ensureUser(session)
+export default async function ApplicationsPage({ searchParams }: ApplicationsPageProps) {
+  const session = await requireSession()
+  const { stage: stageParam } = await searchParams
+  const initialStage = parsePipelineStageFilter(stageParam)
+
   const applications = await applicationsService.listByUser(session.id)
 
   return (
@@ -33,7 +34,6 @@ export default async function ApplicationsPage() {
         <TrackedToast />
       </Suspense>
 
-      {/* Header */}
       <header className="mb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -61,39 +61,14 @@ export default async function ApplicationsPage() {
         </div>
       </header>
 
-      {/* Stats Overview */}
-      {applications.length > 0 && (
-        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-          {[
-            { label: "Total", count: applications.length, color: "bg-slate-100 dark:bg-slate-900" },
-            { label: "Draft", count: applications.filter(a => a.status === "DRAFT" && !a.rejectionPhase).length, color: "bg-slate-50 dark:bg-slate-950" },
-            { label: "Applied", count: applications.filter(a => a.status === "APPLIED" && !a.rejectionPhase).length, color: "bg-yellow-50 dark:bg-yellow-950/30" },
-            { label: "Interview", count: applications.filter(a => a.status === "INTERVIEW" && !a.rejectionPhase).length, color: "bg-sky-50 dark:bg-sky-950/30" },
-            { label: "Offer", count: applications.filter(a => (a.status === "OFFER" || a.status === "ACCEPTED") && !a.rejectionPhase).length, color: "bg-emerald-50 dark:bg-emerald-950/30" },
-            { label: "Rejected", count: applications.filter(a => a.rejectionPhase).length, color: "bg-red-50 dark:bg-red-950/30" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className={`rounded-xl border border-border/50 px-4 py-3 ${stat.color}`}
-            >
-              <p className="text-2xl font-semibold tabular-nums text-foreground">
-                {stat.count}
-              </p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Applications List */}
       {applications.length > 0 ? (
-        <ApplicationsTable applications={applications} />
+        <ApplicationsListView applications={applications} initialStage={initialStage} />
       ) : (
         <EmptyState
           icon={Briefcase}
           title="No applications yet"
           description="Track a job from the board or add one manually to start your pipeline."
-          action={{ label: "Browse jobs", href: "/jobs" }}
+          action={{ label: "Browse jobs", href: "/dashboard/jobs" }}
         />
       )}
     </div>

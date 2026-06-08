@@ -62,16 +62,21 @@ export function ApplicationCoverLetterSection({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {isAiAssisted && (
-                <Badge variant="secondary" className="gap-1 text-[10px]">
-                  <Sparkles className="size-3" aria-hidden />
-                  AI
-                </Badge>
-              )}
               {hasLetter ? (
-                <Badge variant="outline" className="text-[10px]">
-                  Draft saved
-                </Badge>
+                initialLetter!.isUserEdited ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    Edited by you
+                  </Badge>
+                ) : isAiAssisted || initialLetter!.source === "AI" ? (
+                  <Badge variant="secondary" className="gap-1 text-[10px]">
+                    <Sparkles className="size-3" aria-hidden />
+                    AI draft
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">
+                    Draft saved
+                  </Badge>
+                )
               ) : (
                 <Badge variant="outline" className="text-[10px] text-muted-foreground">
                   Not started

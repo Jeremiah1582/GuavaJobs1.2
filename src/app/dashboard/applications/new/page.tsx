@@ -1,12 +1,10 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createManualApplicationAction } from "@/lib/applications/create-manual"
-import { getSession } from "@/lib/auth/get-session"
 
 export const dynamic = "force-dynamic"
 
@@ -14,12 +12,7 @@ export const metadata = {
   title: "Add application",
 }
 
-export default async function NewApplicationPage() {
-  const session = await getSession()
-  if (!session) {
-    redirect("/sign-in?next=/dashboard/applications/new")
-  }
-
+export default function NewApplicationPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-12 md:px-6">
       <PageHeader

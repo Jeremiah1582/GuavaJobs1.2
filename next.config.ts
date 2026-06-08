@@ -28,6 +28,16 @@ const nextConfig: NextConfig = {
         destination: "/sign-in",
         permanent: false,
       },
+      {
+        source: "/dashboard/cover",
+        destination: "/dashboard/applications",
+        permanent: false,
+      },
+      {
+        source: "/dashboard/cover/:path*",
+        destination: "/dashboard/applications",
+        permanent: false,
+      },
     ];
   },
   serverExternalPackages: ["pdfjs-dist", "@prisma/client", "@prisma/adapter-pg", "pg"],

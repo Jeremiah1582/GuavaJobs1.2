@@ -2,7 +2,6 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import type { ApplicationListItem } from "@/lib/applications"
 import type { DashboardPipelineStats } from "@/lib/dashboard/pipeline-stats"
 import type { GettingStartedState } from "@/lib/dashboard/getting-started"
 import type { ProfileCompleteness } from "@/lib/profile"
@@ -117,33 +116,6 @@ function ProfileCompletionRing({
   )
 }
 
-function PipelineStatsRow({ stats }: { stats: DashboardPipelineStats }) {
-  const items = [
-    { label: "Job matches", value: stats.jobMatches, href: "/dashboard/jobs", hint: "70%+ fit" },
-    { label: "Applied", value: stats.applied, href: "/dashboard/applications", hint: "Total sent" },
-    { label: "Interviews", value: stats.interviews, href: "/dashboard/applications", hint: "Scheduled" },
-    { label: "Offers", value: stats.offers, href: "/dashboard/applications", hint: "In hand" },
-  ]
-
-  return (
-    <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:flex-1">
-      {items.map((item) => (
-        <Link
-          key={item.label}
-          href={item.href}
-          className="flex flex-col justify-center rounded-2xl border border-border/60 bg-card px-4 py-4 transition-colors hover:border-guava-pink/30 hover:bg-guava-pink-light/20 md:px-5 md:py-5"
-        >
-          <span className="text-2xl font-semibold tabular-nums tracking-tight md:text-3xl">
-            {item.value}
-          </span>
-          <span className="mt-1 text-xs font-medium text-foreground">{item.label}</span>
-          <span className="mt-0.5 text-[10px] text-muted-foreground">{item.hint}</span>
-        </Link>
-      ))}
-    </div>
-  )
-}
-
 export function OverviewHero({
   displayName,
   gettingStarted,
@@ -221,7 +193,6 @@ export function OverviewHero({
           </div>
         </div>
 
-        <PipelineStatsRow stats={stats} />
       </div>
     </section>
   )
