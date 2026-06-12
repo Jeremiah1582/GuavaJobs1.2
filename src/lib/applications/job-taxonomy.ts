@@ -4,8 +4,13 @@ import type { JobListingSnapshot } from "./snapshots";
 
 export const JOB_CATEGORY_VALUES = [
   "ENGINEERING",
+  "SOFTWARE",
+  "DATA_SCIENCE",
   "PRODUCT",
   "DESIGN",
+  "SALES",
+  "MARKETING",
+  "BUSINESS_DEVELOPMENT",
   "DATA",
   "OTHER",
   "UNKNOWN",
@@ -22,8 +27,13 @@ export const EMPLOYMENT_TYPE_VALUES = [
 
 const JOB_CATEGORY_LABELS: Record<JobCategory, string> = {
   ENGINEERING: "Engineering",
+  SOFTWARE: "Software",
+  DATA_SCIENCE: "Data Science",
   PRODUCT: "Product",
   DESIGN: "Design",
+  SALES: "Sales",
+  MARKETING: "Marketing",
+  BUSINESS_DEVELOPMENT: "Business Development",
   DATA: "Data",
   OTHER: "Other",
   UNKNOWN: "Unknown",

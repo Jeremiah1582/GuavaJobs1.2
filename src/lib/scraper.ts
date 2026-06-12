@@ -15,8 +15,13 @@ export type ScrapedJob = {
   requiredSkills: string[];
 };
 
+import type { ExperienceLevel } from "@/lib/validators/jobs";
+
 export type ScrapeOptions = {
-  queries: string[]; // Comes from user's resume — never hardcoded
+  queries: string[];
+  serpApi?: import("./serpapi-jobs").SerpApiSearchOptions;
+  curatedQueryFilter?: string;
+  experienceLevel?: ExperienceLevel;
 };
 
 // ─── Skill extraction ────────────────────────────────────────────────────────
@@ -57,6 +62,62 @@ function isInternship(title: string, description = ""): boolean {
   return INTERN_TERMS.some((t) => combined.includes(t));
 }
 
+const JUNIOR_TERMS = [
+  "junior",
+  "graduate",
+  "entry level",
+  "entry-level",
+  "associate",
+  "early career",
+  "fresher",
+];
+
+const SENIOR_TERMS = ["senior", "sr.", "staff", "principal", "lead", "director", "head of"];
+
+function haystack(title: string, description: string): string {
+  return `${title} ${description.slice(0, 400)}`.toLowerCase();
+}
+
+/** Returns true when a listing matches the requested experience level. */
+export function matchesExperienceLevel(
+  title: string,
+  description: string,
+  level: string,
+): boolean {
+  if (level === "ANY") return true;
+  if (level === "INTERN") return isInternship(title, description);
+  const combined = haystack(title, description);
+  if (level === "JUNIOR") {
+    return (
+      JUNIOR_TERMS.some((t) => combined.includes(t)) ||
+      (!SENIOR_TERMS.some((t) => combined.includes(t)) && !isInternship(title, description))
+    );
+  }
+  if (level === "MID") {
+    return (
+      !isInternship(title, description) &&
+      !SENIOR_TERMS.some((t) => combined.includes(t))
+    );
+  }
+  if (level === "SENIOR") {
+    return /\bsenior\b|\bsr\.?\b|\bstaff\b|\bprincipal\b/i.test(combined);
+  }
+  if (level === "LEAD") {
+    return /\blead\b|\bstaff\b|\bprincipal\b|\bdirector\b|\bhead of\b/i.test(combined);
+  }
+  return true;
+}
+
+function applyExperienceFilter(
+  jobs: ScrapedJob[],
+  level?: ExperienceLevel,
+): ScrapedJob[] {
+  if (!level || level === "ANY") return jobs;
+  return jobs.filter((j) =>
+    matchesExperienceLevel(j.title, j.description, level),
+  );
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function dedup(jobs: ScrapedJob[]): ScrapedJob[] {
@@ -89,6 +150,7 @@ import {
   resolveApplyUrl,
   resolvePostedAt,
   resolveSalary,
+  type SerpApiSearchOptions,
 } from "./serpapi-jobs";
 
 type JobSource = "serpapi" | "remotive" | "adzuna" | "jsearch" | "arbeitnow";
@@ -125,8 +187,11 @@ function getEnabledSources(): JobSource[] {
 
 // ─── SerpAPI → Google Jobs (real listings) ───────────────────────────────────
 
-async function fetchSerpApi(queries: string[]): Promise<ScrapedJob[]> {
-  const listings = await fetchGoogleJobsFromSerpApi(queries);
+async function fetchSerpApi(
+  queries: string[],
+  serpApi?: SerpApiSearchOptions,
+): Promise<ScrapedJob[]> {
+  const listings = await fetchGoogleJobsFromSerpApi(queries, serpApi);
   const results: ScrapedJob[] = [];
 
   for (const j of listings) {
@@ -209,9 +274,7 @@ async function fetchJSearch(queries: string[]): Promise<ScrapedJob[]> {
         if (!res.ok) return;
         const data = await res.json();
 
-        ((data.data as JSearchJob[]) ?? [])
-          .filter((j) => isInternship(j.job_title, j.job_description))
-          .forEach((j) => {
+        ((data.data as JSearchJob[]) ?? []).forEach((j) => {
             const cur = j.job_salary_currency ?? "USD";
             const fmt = (n: number) =>
               new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(n);
@@ -243,7 +306,7 @@ async function fetchJSearch(queries: string[]): Promise<ScrapedJob[]> {
     })
   );
 
-  console.log(`[scraper] JSearch: ${results.length} internships`);
+  console.log(`[scraper] JSearch: ${results.length} listings`);
   return results;
 }
 
@@ -274,9 +337,7 @@ async function fetchRemotive(queries: string[]): Promise<ScrapedJob[]> {
         if (!res.ok) return;
         const data = await res.json();
 
-        ((data.jobs as RemotiveJob[]) ?? [])
-          .filter((j) => isInternship(j.title, j.description))
-          .forEach((j) => {
+        ((data.jobs as RemotiveJob[]) ?? []).forEach((j) => {
             results.push({
               id: `remotive_${j.id}`,
               title: j.title,
@@ -299,7 +360,7 @@ async function fetchRemotive(queries: string[]): Promise<ScrapedJob[]> {
     })
   );
 
-  console.log(`[scraper] Remotive: ${results.length} internships`);
+  console.log(`[scraper] Remotive: ${results.length} listings`);
   return results;
 }
 
@@ -323,15 +384,12 @@ async function fetchArbeitnow(queries: string[]): Promise<ScrapedJob[]> {
     if (!res.ok) return [];
     const data = await res.json();
 
-    // Filter by user's query terms AND internship terms
     const queryTerms = queries.map((q) => q.toLowerCase());
 
     return ((data.data as ArbeitnowJob[]) ?? [])
       .filter((j) => {
-        if (!isInternship(j.title, j.description)) return false;
-        // Must also match at least one of the user's query terms
         const combined = `${j.title} ${j.description}`.toLowerCase();
-        return queryTerms.some((q) => combined.includes(q.split(" ")[0])); // match first word of query
+        return queryTerms.some((q) => combined.includes(q.split(" ")[0]));
       })
       .slice(0, 25)
       .map((j) => ({
@@ -390,9 +448,7 @@ async function fetchAdzuna(queries: string[]): Promise<ScrapedJob[]> {
         if (!res.ok) return;
         const data = await res.json();
 
-        ((data.results as AdzunaJob[]) ?? [])
-          .filter((j) => isInternship(j.title, j.description))
-          .forEach((j) => {
+        ((data.results as AdzunaJob[]) ?? []).forEach((j) => {
             const fmt = (n: number) =>
               new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
             results.push({
@@ -419,43 +475,55 @@ async function fetchAdzuna(queries: string[]): Promise<ScrapedJob[]> {
     })
   );
 
-  console.log(`[scraper] Adzuna: ${results.length} internships`);
+  console.log(`[scraper] Adzuna: ${results.length} listings`);
   return results;
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-const SOURCE_FETCHERS: Record<
-  JobSource,
-  (queries: string[]) => Promise<ScrapedJob[]>
-> = {
-  serpapi: fetchSerpApi,
-  remotive: fetchRemotive,
-  adzuna: fetchAdzuna,
-  jsearch: fetchJSearch,
-  arbeitnow: fetchArbeitnow,
-};
-
 export async function scrapeAll(options: ScrapeOptions): Promise<ScrapedJob[]> {
-  const { queries } = options;
+  const { queries, serpApi, experienceLevel } = options;
   const enabled = getEnabledSources();
   console.log(
     `[scraper] Sources: ${enabled.join(", ")} | Queries: ${queries.join(" | ")}`,
   );
 
-  const batches = await Promise.allSettled(
-    enabled.map((source) => SOURCE_FETCHERS[source](queries)),
-  );
+  const { ingestCuratedAtsBoards } = await import("./jobs/ats/ingest");
 
-  const all = batches.flatMap((res) =>
-    res.status === "fulfilled" ? res.value : [],
-  );
+  const [sourceBatches, curated] = await Promise.all([
+    Promise.allSettled(
+      enabled.map((source) => {
+        if (source === "serpapi") return fetchSerpApi(queries, serpApi);
+        if (source === "remotive") return fetchRemotive(queries);
+        if (source === "adzuna") return fetchAdzuna(queries);
+        if (source === "jsearch") return fetchJSearch(queries);
+        if (source === "arbeitnow") return fetchArbeitnow(queries);
+        return Promise.resolve([] as ScrapedJob[]);
+      }),
+    ),
+    ingestCuratedAtsBoards({ queryFilter: options.curatedQueryFilter }),
+  ]);
+
+  const all = [
+    ...sourceBatches.flatMap((res) => (res.status === "fulfilled" ? res.value : [])),
+    ...curated,
+  ];
   console.log(`[scraper] Total before dedup: ${all.length}`);
 
-  const final = dedup(all).sort(
-    (a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()
+  let final = dedup(all).sort(
+    (a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime(),
   );
 
-  console.log(`[scraper] Final: ${final.length} unique internships`);
+  final = applyExperienceFilter(final, experienceLevel);
+
+  console.log(`[scraper] Final: ${final.length} unique listings`);
+  return final;
+}
+
+/** SerpAPI-only path for wider scan (no curated ATS boards). */
+export async function scrapeSerpApiOnly(options: ScrapeOptions): Promise<ScrapedJob[]> {
+  const scraped = await fetchSerpApi(options.queries, options.serpApi);
+  let final = dedup(scraped);
+  final = applyExperienceFilter(final, options.experienceLevel);
   return final;
 }

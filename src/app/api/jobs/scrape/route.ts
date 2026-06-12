@@ -1,25 +1,32 @@
-// src/app/api/jobs/scrape/route.ts
-import { NextResponse } from "next/server";
+// src/app/api/jobs/scrape/route.ts — SerpAPI wider scan (global merge)
+import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+
 import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
-import { randomUUID } from "crypto";
-import { rescoreUserJobMatches } from "@/lib/jobs/rescore-matches";
-import {
-  clearStaleScrapeRuns,
-  countUserCachedJobs,
-  pruneOrphanMatches,
-  replaceUserJobCache,
-} from "@/lib/jobs-api";
 import { epochMsNow, epochMsToIso } from "@/lib/epoch-ms";
+import { rescoreJobIds } from "@/lib/jobs/rescore-matches";
+import { appendLevelSuffix, buildScrapeQueries } from "@/lib/jobs/scrape-queries";
+import { clearStaleScrapeRuns } from "@/lib/jobs/scrape-runs";
+import {
+  countGlobalActiveJobs,
+  findGlobalJobIdsByQueryHash,
+  hashScrapeOverrides,
+  mergeSerpApiIntoGlobalCache,
+} from "@/lib/jobs/serp-cache";
+import { scrapeSerpApiOnly } from "@/lib/scraper";
 import { getSerpApiKey } from "@/lib/serpapi-jobs";
+import { COUNTRY_SERPAPI, type ExperienceLevel } from "@/lib/validators/jobs";
+import {
+  scrapeOverridesSchema,
+  type ScrapeOverrides,
+} from "@/lib/validators/saved-job-searches";
+import type { ProfileImportMeta } from "@/lib/validators/profile";
 
-async function getScraper() {
-  const { scrapeAll } = await import("@/lib/scraper");
-  return scrapeAll;
-}
+const SERP_SYNC_TAG = "[serp-sync]";
 
 export async function GET() {
   try {
@@ -27,9 +34,10 @@ export async function GET() {
     if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
     const latest = await prisma.scrapeRun.findFirst({
+      where: { error: { startsWith: SERP_SYNC_TAG } },
       orderBy: { startedAt: "desc" },
     });
-    const jobCount = await countUserCachedJobs(session.id);
+    const jobCount = await countGlobalActiveJobs();
     return NextResponse.json({
       run: latest
         ? {
@@ -45,18 +53,18 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
     const session = await getLegacyApiSession();
     if (isSessionResponse(session)) return session;
     await clearStaleScrapeRuns();
 
     const running = await prisma.scrapeRun.findFirst({
-      where: { status: "running" },
+      where: { status: "running", error: { startsWith: SERP_SYNC_TAG } },
     });
     if (running) {
       return NextResponse.json(
-        { error: "A scan is already in progress. Wait for it to finish." },
+        { error: "A wider scan is already in progress." },
         { status: 409 },
       );
     }
@@ -65,168 +73,144 @@ export async function POST() {
       return NextResponse.json(
         {
           error:
-            "SERPAPI_API_KEY is not set. Add it to .env.local to fetch real Google Jobs listings.",
+            "SERPAPI_API_KEY is not set. Add it to .env.local to scan wider via Google Jobs.",
         },
         { status: 400 },
       );
     }
 
-    const resume = await prisma.resume.findFirst({
-      where: { userId: session.id, isActive: 1 },
-    });
-    if (!resume) {
-      return NextResponse.json(
-        { error: "Upload your resume first so we can find relevant jobs." },
-        { status: 400 },
-      );
+    let overrides: ScrapeOverrides | undefined;
+    try {
+      const text = await req.text();
+      if (text.trim()) {
+        const parsed = scrapeOverridesSchema.safeParse(JSON.parse(text));
+        if (parsed.success) overrides = parsed.data;
+      }
+    } catch {
+      /* empty body ok */
+    }
+
+    const queryHash = hashScrapeOverrides(overrides);
+    const cachedIds = await findGlobalJobIdsByQueryHash(queryHash);
+    if (cachedIds.length > 0) {
+      return NextResponse.json({
+        message: "Using cached wider-scan results for this query.",
+        runId: null,
+        queryHash,
+        jobIds: cachedIds,
+        cached: true,
+      });
     }
 
     const runId = randomUUID();
-    await prisma.scrapeRun.create({ data: { id: runId, status: "running" } });
-    runScraper(runId, session.id, resume).catch(console.error);
+    await prisma.scrapeRun.create({
+      data: { id: runId, status: "running", error: `${SERP_SYNC_TAG} hash=${queryHash}` },
+    });
 
-    return NextResponse.json({ message: "Scrape started.", runId });
+    runSerpWider(runId, session.id, overrides, queryHash).catch(console.error);
+
+    return NextResponse.json({ message: "Wider scan started.", runId, queryHash });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     }
     console.error("[jobs/scrape POST]", err);
-    return NextResponse.json({ error: "Failed to start scrape." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to start wider scan." }, { status: 500 });
   }
 }
 
-function buildQueries(resume: { skills: string; rawText: string }): string[] {
-  let skills: string[] = [];
-  try {
-    skills = JSON.parse(resume.skills || "[]") as string[];
-    if (!Array.isArray(skills)) skills = [];
-  } catch {
-    skills = [];
-  }
-
-  const queries: string[] = [];
-  const is = (terms: string[]) =>
-    terms.some((t) => skills.some((s) => s.toLowerCase() === t.toLowerCase()));
-
-  if (
-    is([
-      "Machine Learning",
-      "Deep Learning",
-      "TensorFlow",
-      "PyTorch",
-      "NLP",
-      "Computer Vision",
-    ])
-  ) {
-    queries.push("machine learning internship", "AI internship");
-  }
-  if (is(["React", "Vue", "Angular", "Next.js", "HTML", "CSS", "Tailwind"])) {
-    queries.push("frontend developer internship");
-  }
-  if (
-    is([
-      "Node.js",
-      "Django",
-      "Flask",
-      "Spring Boot",
-      "FastAPI",
-      "Express",
-      "PostgreSQL",
-      "MongoDB",
-    ])
-  ) {
-    queries.push("backend developer internship");
-  }
-  if (
-    is([
-      "Pandas",
-      "NumPy",
-      "SQL",
-      "Tableau",
-      "Power BI",
-      "Data Analysis",
-      "Data Science",
-    ])
-  ) {
-    queries.push("data science internship");
-  }
-  if (is(["React Native", "Flutter", "Swift", "Kotlin", "iOS", "Android"])) {
-    queries.push("mobile developer internship");
-  }
-  if (is(["Docker", "Kubernetes", "AWS", "Azure", "GCP", "CI/CD"])) {
-    queries.push("devops internship");
-  }
-
-  const hard = skills
-    .filter(
-      (s) =>
-        ![
-          "Communication",
-          "Leadership",
-          "Teamwork",
-          "Problem Solving",
-          "Agile",
-          "Scrum",
-        ].includes(s),
-    )
-    .slice(0, 2);
-  hard.forEach((s) => queries.push(`${s} internship`));
-
-  queries.push("software engineering internship", "entry level software internship");
-
-  const unique = [...new Set(queries)].slice(0, 6);
-  return unique.length > 0 ? unique : ["software engineering internship"];
-}
-
-async function runScraper(
+async function runSerpWider(
   runId: string,
   userId: string,
-  resume: { id: string; skills: string; rawText: string; summary: string | null },
+  overrides: ScrapeOverrides | undefined,
+  queryHash: string,
 ) {
   try {
-    const queries = buildQueries(resume);
-    console.log(`[scrape] Queries: ${queries.join(" | ")}`);
+    const [resume, profile] = await Promise.all([
+      prisma.resume.findFirst({ where: { userId, isActive: 1 } }),
+      prisma.profile.findUnique({ where: { userId } }),
+    ]);
 
-    const scrapeAll = await getScraper();
-    const scraped = await scrapeAll({ queries });
-    console.log(`[scrape] ${scraped.length} jobs from SerpAPI`);
+    const meta = (profile?.importMetaJson as ProfileImportMeta | null) ?? null;
+    const dsp = meta?.searchProfile;
+    const level: ExperienceLevel = overrides?.experienceLevel ?? "ANY";
+
+    let baseQueries: string[];
+    if (overrides?.q?.trim()) {
+      baseQueries = [overrides.q.trim()];
+    } else if (dsp?.primaryRoles?.length) {
+      baseQueries = dsp.primaryRoles.slice(0, 4);
+    } else if (resume) {
+      baseQueries = buildScrapeQueries(resume, overrides);
+    } else if (profile?.skills?.length) {
+      baseQueries = buildScrapeQueries(
+        { skills: JSON.stringify(profile.skills), rawText: "" },
+        overrides,
+      );
+    } else {
+      baseQueries = ["software engineer"];
+    }
+
+    const queries = appendLevelSuffix(baseQueries, level);
+    const countryOpts = overrides?.country
+      ? (COUNTRY_SERPAPI[overrides.country] ?? {})
+      : {};
+
+    const scraped = await scrapeSerpApiOnly({
+      queries,
+      serpApi: overrides
+        ? {
+            location: overrides.where ?? countryOpts.location,
+            gl: countryOpts.gl ?? overrides.country,
+            maxDaysOld: overrides.maxDaysOld,
+          }
+        : undefined,
+      experienceLevel: level,
+    });
 
     if (scraped.length === 0) {
-      await replaceUserJobCache(userId, []);
       await prisma.scrapeRun.update({
         where: { id: runId },
         data: {
           status: "done",
           finishedAt: epochMsNow(),
           jobsFound: 0,
-          error:
-            "No jobs returned from Google Jobs (SerpAPI). Check SERPAPI_API_KEY, quota, and try SERPAPI_LOCATION in .env.local (e.g. United Kingdom).",
+          error: `${SERP_SYNC_TAG} hash=${queryHash} empty`,
         },
       });
       return;
     }
 
-    const cached = await replaceUserJobCache(userId, scraped);
-    const jobIds = scraped.map((j) => j.id);
-    await pruneOrphanMatches(userId, jobIds);
+    const { count, jobIds } = await mergeSerpApiIntoGlobalCache(queryHash, scraped);
 
-    const scored = await rescoreUserJobMatches({
-      userId,
-      resumeId: resume.id,
-    });
-
-    console.log(`[scrape] ${cached} cached, ${scored} scored`);
+    if (resume) {
+      await rescoreJobIds({
+        userId,
+        resumeId: resume.id,
+        jobIds,
+        isCareerChange: dsp?.isCareerChange === true,
+      });
+    }
 
     await prisma.scrapeRun.update({
       where: { id: runId },
-      data: { status: "done", finishedAt: epochMsNow(), jobsFound: cached },
+      data: {
+        status: "done",
+        finishedAt: epochMsNow(),
+        jobsFound: count,
+        error: `${SERP_SYNC_TAG} hash=${queryHash}`,
+      },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[scrape] Fatal:", err);
+    console.error("[serp-sync] Fatal:", err);
     await prisma.scrapeRun.update({
       where: { id: runId },
-      data: { status: "error", finishedAt: epochMsNow(), error: message },
+      data: {
+        status: "error",
+        finishedAt: epochMsNow(),
+        error: `${SERP_SYNC_TAG} hash=${queryHash} ${message}`,
+      },
     });
   }
 }
