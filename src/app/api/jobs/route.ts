@@ -1,15 +1,19 @@
-// src/app/api/jobs/route.ts — real listings from per-user SerpAPI cache
+// src/app/api/jobs/route.ts — global job index + per-user matches/saved state
 import { NextRequest, NextResponse } from "next/server";
+
 import {
   getLegacyApiSession,
   isSessionResponse,
 } from "@/lib/auth/legacy-api-session";
 import { prisma } from "@/db";
-import {
-  buildJobListItems,
-  clearStaleScrapeRuns,
-  listJobsForUser,
-} from "@/lib/jobs-api";
+import { loadJobsDashboard } from "@/lib/jobs/load-jobs-dashboard";
+import { clearStaleScrapeRuns } from "@/lib/jobs/scrape-runs";
+import { triggerLazyRescore } from "@/lib/jobs/rescore-matches";
+import { getSerpApiKey } from "@/lib/serpapi-jobs";
+import { experienceLevelSchema, jobCountrySchema } from "@/lib/validators/jobs";
+
+const WORK_MODES = new Set(["all", "remote", "hybrid", "onsite"]);
+const WIDER_SCAN_THRESHOLD = 15;
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,49 +22,89 @@ export async function GET(req: NextRequest) {
     await clearStaleScrapeRuns();
     const userId = session.id;
     const { searchParams } = new URL(req.url);
-    const search = searchParams.get("search")?.toLowerCase() ?? "";
-    const filter = searchParams.get("filter") ?? "all";
+
+    const q = searchParams.get("q")?.trim() || undefined;
+    const modeParam = searchParams.get("mode");
+    const mode =
+      modeParam === "search"
+        ? "search"
+        : modeParam === "recommended"
+          ? "recommended"
+          : q
+            ? "search"
+            : "recommended";
+
+    const levelRaw =
+      searchParams.get("level") ?? searchParams.get("experienceLevel");
+    const experienceLevelParsed = experienceLevelSchema.safeParse(levelRaw);
+    const experienceLevel = experienceLevelParsed.success
+      ? experienceLevelParsed.data
+      : null;
+
+    const workModeRaw = searchParams.get("workMode") ?? searchParams.get("filter") ?? "all";
+    const workMode = WORK_MODES.has(workModeRaw)
+      ? (workModeRaw as "all" | "remote" | "hybrid" | "onsite")
+      : "all";
+
+    const countryParsed = jobCountrySchema.safeParse(searchParams.get("country"));
+    const country = countryParsed.success ? countryParsed.data : null;
+
+    const where = searchParams.get("where")?.trim() || undefined;
+
+    const limit = Math.min(
+      200,
+      Math.max(1, Number.parseInt(searchParams.get("limit") ?? "100", 10) || 100),
+    );
+    const offset = Math.max(
+      0,
+      Number.parseInt(searchParams.get("offset") ?? "0", 10) || 0,
+    );
+
+    const loaded = await loadJobsDashboard(userId, {
+      q,
+      mode,
+      experienceLevel,
+      workMode: workMode === "all" ? undefined : workMode,
+      country,
+      where,
+      limit,
+      offset,
+    });
+
+    const result = loaded.jobs;
+    const searchProfile = loaded.searchProfile;
 
     const resume = await prisma.resume.findFirst({
       where: { userId, isActive: 1 },
     });
 
-    const { cached, matches, saved, applied } = await listJobsForUser(
-      userId,
-      resume?.id ?? null,
-    );
-
-    let result = buildJobListItems(cached, matches, saved, applied);
-
-    if (filter === "remote") result = result.filter((j) => j.type === "Remote");
-    else if (filter === "hybrid") result = result.filter((j) => j.type === "Hybrid");
-    else if (filter === "onsite")
-      result = result.filter((j) => j.type === "On-site");
-
-    if (search) {
-      result = result.filter(
-        (j) =>
-          j.title.toLowerCase().includes(search) ||
-          j.company.toLowerCase().includes(search) ||
-          j.tags.some((t) => t.toLowerCase().includes(search)),
+    if (resume) {
+      const unscoredIds = result
+        .filter((j) => j.overallFitScore === null)
+        .slice(0, 30)
+        .map((j) => j.id);
+      triggerLazyRescore(
+        userId,
+        resume.id,
+        unscoredIds,
+        searchProfile?.isCareerChange === true,
       );
     }
 
-    result.sort((a, b) => {
-      const aScore = a.overallFitScore ?? a.matchScore;
-      const bScore = b.overallFitScore ?? b.matchScore;
-      if (aScore === null && bScore === null) return 0;
-      if (aScore === null) return 1;
-      if (bScore === null) return -1;
-      return bScore - aScore;
-    });
+    const needsWiderScan =
+      result.length < WIDER_SCAN_THRESHOLD && Boolean(getSerpApiKey());
 
     return NextResponse.json({
       jobs: result,
       hasResume: !!resume,
+      hasSearchProfile: !!searchProfile,
+      searchProfile: searchProfile ?? undefined,
+      mode,
+      widenedFamilies: loaded.widenedFamilies,
       total: result.length,
-      cachedCount: cached.length,
-      needsScan: cached.length === 0,
+      cachedCount: loaded.globalJobCount,
+      needsScan: loaded.globalJobCount === 0,
+      needsWiderScan,
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

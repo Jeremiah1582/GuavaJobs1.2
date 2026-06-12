@@ -4,6 +4,12 @@ const SERPAPI_BASE = "https://serpapi.com/search.json";
 const MAX_QUERIES = 5;
 const MAX_PAGES_PER_QUERY = 3; // up to ~10 results per page
 
+export type SerpApiSearchOptions = {
+  location?: string;
+  gl?: string;
+  maxDaysOld?: number;
+};
+
 export type SerpApiJob = {
   title?: string;
   company_name?: string;
@@ -36,18 +42,27 @@ export function getSerpApiKey(): string | null {
   return key || null;
 }
 
-function buildSearchUrl(query: string, apiKey: string, nextPageToken?: string): string {
+function buildSearchUrl(
+  query: string,
+  apiKey: string,
+  options?: SerpApiSearchOptions,
+  nextPageToken?: string,
+): string {
   const url = new URL(SERPAPI_BASE);
   url.searchParams.set("engine", "google_jobs");
   url.searchParams.set("q", query);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("hl", process.env.SERPAPI_HL?.trim() || "en");
 
-  const gl = process.env.SERPAPI_GL?.trim();
+  const gl = options?.gl ?? process.env.SERPAPI_GL?.trim();
   if (gl) url.searchParams.set("gl", gl);
 
-  const location = process.env.SERPAPI_LOCATION?.trim();
+  const location = options?.location ?? process.env.SERPAPI_LOCATION?.trim();
   if (location) url.searchParams.set("location", location);
+
+  if (options?.maxDaysOld) {
+    url.searchParams.set("chips", `date_posted:${options.maxDaysOld}d`);
+  }
 
   if (nextPageToken) url.searchParams.set("next_page_token", nextPageToken);
 
@@ -104,6 +119,7 @@ export function resolvePostedAt(job: SerpApiJob): string {
 /** Fetch real Google Jobs listings from SerpAPI for each search query. */
 export async function fetchGoogleJobsFromSerpApi(
   queries: string[],
+  options?: SerpApiSearchOptions,
 ): Promise<SerpApiJob[]> {
   const apiKey = getSerpApiKey();
   if (!apiKey) {
@@ -123,7 +139,7 @@ export async function fetchGoogleJobsFromSerpApi(
     console.log(`[serpapi] Searching: "${query}"`);
 
     do {
-      const url = buildSearchUrl(query, apiKey, nextPageToken);
+      const url = buildSearchUrl(query, apiKey, options, nextPageToken);
       const res = await fetch(url);
 
       if (!res.ok) {

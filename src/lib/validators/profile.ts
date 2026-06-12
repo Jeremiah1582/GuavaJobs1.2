@@ -9,6 +9,7 @@ import {
 } from "@/generated/prisma";
 
 import { EMPLOYMENT_PREFERENCE_VALUES } from "../profile/career-preferences";
+import { searchProfileSchema } from "./search-profile";
 
 export const experienceEntrySchema = z.object({
   role: z.string().min(1).max(200),
@@ -51,6 +52,7 @@ export const profileImportMetaSchema = z.object({
     .optional(),
   /** Fields the user has manually edited — imports must not overwrite without consent. */
   userEditedFields: z.array(z.string().max(80)).max(64).optional(),
+  searchProfile: searchProfileSchema.optional(),
 });
 
 const nullableShortText = (max: number) =>

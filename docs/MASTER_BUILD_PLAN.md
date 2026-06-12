@@ -1,4 +1,4 @@
-created_date: 2026-06-03 12:00:00, updated_at: 2026-06-08 13:30:00
+created_date: 2026-06-03 12:00:00, updated_at: 2026-06-12 21:00:00
 
 # InternHunt — Master Build Plan
 
@@ -87,7 +87,7 @@ Wave 0D API helpers          ─┘         │
 | Application hub shell | **Ready (W4)** | `DashboardShell` layout; `ApplicationTracker` compact + full; detail hub wired |
 | Storage | **Partial** | `cv-uploads` via `storage:ensure` + service-role upload; `resumes` bucket deferred |
 
-**Next:** **Wave 6** — Saved searches UI + scrape params (Wave 5B bidirectional match complete).
+**Next:** **Wave 6** — Saved searches UI + scrape params. **Job search overhaul (2026-06-12):** all-level ATS ingest, hero-search-bar UX, auto sync + Serp backfill, fit-ranked results.
 
 ### 1.4 Locked decisions (do not re-litigate)
 
@@ -100,7 +100,7 @@ Wave 0D API helpers          ─┘         │
 | Storage | **Supabase Storage** preferred (`cv-uploads`, `resumes`); local `RESUMES_DIR` fallback only if bucket blocked |
 | Routes | Product UI under `/dashboard/*` only |
 | Cover letters | Application-scoped; `Application.coverLetterId` 1:1; `Application.resumeId` → Resume (1:N); remove `/dashboard/cover` in Wave 5 |
-| Jobs | Keep `src/lib/jobs-api.ts` + SerpAPI; do not port `core/services/jobs` yet |
+| Jobs | Global ATS index + hero search (`src/lib/jobs/*`); profile.location defaults; SerpAPI wider-scan when &lt;15 hits |
 | Validators | Zod 4 when porting from core |
 | Tracker UI | **Minimized** on `/dashboard`; **full** on `/dashboard/applications` |
 

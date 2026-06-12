@@ -37,9 +37,31 @@ enum CoverLetterSource {
 
 enum JobCategory {
   ENGINEERING
+  SOFTWARE
+  DATA_SCIENCE
   PRODUCT
   DESIGN
+  SALES
+  MARKETING
+  BUSINESS_DEVELOPMENT
   DATA
+  OTHER
+  UNKNOWN
+}
+
+enum RoleFamily {
+  FULLSTACK
+  FRONTEND
+  BACKEND
+  SOFTWARE_ENGINEER
+  MOBILE
+  DEVOPS
+  DATA_SCIENCE
+  DATA_ANALYTICS
+  ML_AI
+  PRODUCT_MANAGER
+  UX_DESIGN
+  QA
   OTHER
   UNKNOWN
 }
@@ -349,19 +371,22 @@ model Resume {
 }
 
 model Job {
-  id             String  @id
-  userId         String? @map("user_id") @db.Uuid
+  id             String      @id
+  userId         String?     @map("user_id") @db.Uuid
   title          String
   company        String
-  location       String  @default("")
-  locationType   String  @default("Unknown") @map("location_type")
-  description    String  @default("")
+  companyLogoUrl String?     @map("company_logo_url")
+  location       String      @default("")
+  locationType   String      @default("Unknown") @map("location_type")
+  description    String      @default("")
   url            String
   source         String
-  requiredSkills String  @default("[]") @map("required_skills")
-  postedAt       BigInt? @map("posted_at")
-  scrapedAt      BigInt  @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("scraped_at")
-  isActive       Int     @default(1) @map("is_active")
+  requiredSkills String      @default("[]") @map("required_skills")
+  postedAt       BigInt?     @map("posted_at")
+  scrapedAt      BigInt      @default(dbgenerated("(extract(epoch from now()) * 1000)::bigint")) @map("scraped_at")
+  isActive       Int         @default(1) @map("is_active")
+  roleFamily     RoleFamily  @default(UNKNOWN) @map("role_family")
+  jobCategory    JobCategory @default(UNKNOWN) @map("job_category")
 
   user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobMatches         JobMatch[]
@@ -370,6 +395,8 @@ model Job {
   @@index([userId], map: "jobs_userId_idx")
   @@index([source], map: "jobs_source_idx")
   @@index([company], map: "jobs_company_idx")
+  @@index([roleFamily], map: "jobs_role_family_idx")
+  @@index([jobCategory], map: "jobs_job_category_idx")
   @@map("jobs")
 }
 

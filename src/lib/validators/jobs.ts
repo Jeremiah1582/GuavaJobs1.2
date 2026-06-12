@@ -1,6 +1,24 @@
 import { z } from "zod";
 
-export const jobCountrySchema = z.enum(["gb", "de"]);
+export const jobCountrySchema = z.enum(["gb", "de", "us", "global"]);
+export type JobCountry = z.infer<typeof jobCountrySchema>;
+
+export const COUNTRY_SERPAPI: Record<JobCountry, { gl?: string; location?: string }> = {
+  gb: { gl: "gb", location: "United Kingdom" },
+  de: { gl: "de", location: "Germany" },
+  us: { gl: "us", location: "United States" },
+  global: {},
+};
+
+export const experienceLevelSchema = z.enum([
+  "ANY",
+  "INTERN",
+  "JUNIOR",
+  "MID",
+  "SENIOR",
+  "LEAD",
+]);
+export type ExperienceLevel = z.infer<typeof experienceLevelSchema>;
 
 export const jobSortSchema = z.enum(["relevance", "date"]);
 
@@ -13,8 +31,8 @@ const legacyJobIdSchema = z
 const compositeJobIdSchema = z
   .string()
   .regex(
-    /^(adzuna|remotive|serpapi):[^:]+:[^:]+$/i,
-    "Invalid composite job id (expected e.g. remotive:global:12345)",
+    /^(adzuna|remotive|serpapi|gh|lever):[^:]+:[^:]+$/i,
+    "Invalid composite job id",
   );
 
 export const jobIdParamSchema = z.union([legacyJobIdSchema, compositeJobIdSchema]);
@@ -22,7 +40,7 @@ export const jobIdParamSchema = z.union([legacyJobIdSchema, compositeJobIdSchema
 export const jobSearchSchema = z.object({
   q: z.string().trim().max(200).optional(),
   where: z.string().trim().max(200).optional(),
-  country: jobCountrySchema.default("gb"),
+  country: jobCountrySchema.default("global"),
   page: z.coerce.number().int().min(1).max(50).default(1),
   resultsPerPage: z.coerce.number().int().min(1).max(50).default(20),
   distanceKm: z.coerce.number().int().min(1).max(200).optional(),
